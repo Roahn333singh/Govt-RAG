@@ -55,6 +55,7 @@ Rules:
 - Remove filler words like "can you tell me", "what is", "please explain", etc.
 - Focus on the core information need — nouns and domain terms matter most.
 - Output ONLY the rewritten query. No explanation. No punctuation at the end.
+- IMPORTANT: You MUST write the search query in the SAME LANGUAGE as the user's question. If the user asks in Hindi, output the rewritten query in Hindi.
 
 User Question: {user_query}
 Optimized Search Query:"""
@@ -72,8 +73,8 @@ def retriever_node(state: RagState):
 
     context = run_hybrid_search(query)
 
-    # GUARDRAIL: empty results or very low RRF score → off-topic query
-    if not context or context[0].score < 0.35:
+    # GUARDRAIL: empty results or very low cross-encoder score → off-topic query
+    if not context or context[0].score < -3.0:
         return {"context": "REJECT"}
 
     context_text = "\n\n".join(

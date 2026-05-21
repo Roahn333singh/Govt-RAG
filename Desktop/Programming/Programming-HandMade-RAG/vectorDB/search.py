@@ -106,7 +106,11 @@ def run_hybrid_search(question: str, top_k: int = 6):
         # Higher score = more relevant. Zip, sort descending, take top_k.
         scores = list(reranker.rerank(question, doc_texts))
         scored_pairs = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
-        reranked = [candidate for _, candidate in scored_pairs[:top_k]]
+        reranked = []
+        for s, candidate in scored_pairs[:top_k]:
+            candidate.score = s
+            reranked.append(candidate)
+            
         print(
             f"✅ Re-ranked {len(candidates)} candidates → returning top {len(reranked)}"
         )
