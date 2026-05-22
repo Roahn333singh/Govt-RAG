@@ -53,9 +53,9 @@ that will retrieve the most relevant document chunks from the database.
 Rules:
 - Keep specific names (portal names, department names, act names, scheme names) exactly as given.
 - Remove filler words like "can you tell me", "what is", "please explain", etc.
-- Focus on the core information need — nouns and domain terms matter most.
+- Write the optimized query in the same language(s) as the user's question. Do not translate Hindi terms to English, or English to Hindi.
 - Output ONLY the rewritten query. No explanation. No punctuation at the end.
-- IMPORTANT: You MUST write the search query in the SAME LANGUAGE as the user's question. If the user asks in Hindi, output the rewritten query in Hindi.
+- IMPORTANT: Retain technical terms exactly as they are. If the user asks a mixed Hindi/English question (e.g. 'Bid Capacity कैसे निर्धारित की जाती है?'), extract the core keywords without forcing a translation.
 
 User Question: {user_query}
 Optimized Search Query:"""
@@ -101,9 +101,10 @@ async def generator_node(state: RagState):
             ]
         }
 
-    prompt = f"""You are a helpful assistant. Answer the user's question strictly based
-on the context provided below. Do not answer anything outside of the given context.
-If the context does not contain enough information to answer, say so honestly.
+    prompt = f"""You are a helpful assistant for UP Government Data. 
+Answer the user's question primarily based on the context provided below. 
+If the user asks for the definition of a term (like 'Arbitration' or 'Tender') that appears in the context, you may use your general knowledge to define it, but you MUST then explain how it is used within the provided context.
+If the question is completely unrelated to the context, say that you don't have enough information.
 
 Context:
 {state["context"]}
