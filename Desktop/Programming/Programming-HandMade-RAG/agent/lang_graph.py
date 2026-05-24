@@ -51,11 +51,10 @@ Rewrite the user's question into a short, keyword-dense search query (max 20 wor
 that will retrieve the most relevant document chunks from the database.
 
 Rules:
-- Keep specific names (portal names, department names, act names, scheme names) exactly as given.
 - Remove filler words like "can you tell me", "what is", "please explain", etc.
-- Write the optimized query in the same language(s) as the user's question. Do not translate Hindi terms to English, or English to Hindi.
+- IMPORTANT TRANSLITERATION RULE: The database documents are written in Devanagari Hindi (e.g., निविदा समिति) and proper English. If the user asks in "Hinglish" (Hindi written using the English alphabet, e.g., "nivida samiti kya hai"), you MUST transliterate/translate the keywords into proper Devanagari Hindi (e.g., "निविदा समिति") to ensure keyword matching works.
+- If the query contains standard English technical terms (like "Bid Capacity"), keep them in English.
 - Output ONLY the rewritten query. No explanation. No punctuation at the end.
-- IMPORTANT: Retain technical terms exactly as they are. If the user asks a mixed Hindi/English question (e.g. 'Bid Capacity कैसे निर्धारित की जाती है?'), extract the core keywords without forcing a translation.
 
 User Question: {user_query}
 Optimized Search Query:"""
