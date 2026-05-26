@@ -10,8 +10,7 @@ from langchain_core.messages import AIMessage
 from langgraph.graph import START, MessagesState, StateGraph
 from vectorDB.search import run_hybrid_search
 
-load_dotenv()
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+load_dotenv(override=True)
 
 _llm = None
 
@@ -21,7 +20,7 @@ def get_llm():
         from langchain_google_genai import ChatGoogleGenerativeAI
         _llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            google_api_key=GOOGLE_API_KEY,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.7,
         )
     return _llm

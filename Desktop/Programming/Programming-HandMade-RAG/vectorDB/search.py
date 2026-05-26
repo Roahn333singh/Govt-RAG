@@ -12,7 +12,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Config
 QDRANT_URL = os.getenv(
@@ -20,7 +20,6 @@ QDRANT_URL = os.getenv(
     "https://d63776f5-a8d8-4f7f-baed-49b914dfe0a1.us-east-1-1.aws.cloud.qdrant.io",
 )
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 COLLECTION_NAME = "my-collection"
 CACHE_COLLECTION_NAME = "semantic-query-cache"
 
@@ -60,7 +59,7 @@ def init_services():
     if dense_embedder is None:
         dense_embedder = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-2",
-            google_api_key=GOOGLE_API_KEY,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
             output_dimensionality=1536,
         )
     if sparse_embedder is None:

@@ -8,6 +8,9 @@ import urllib.request
 # We bypass it completely here before any other libraries load.
 urllib.request.getproxies = lambda: {}
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
