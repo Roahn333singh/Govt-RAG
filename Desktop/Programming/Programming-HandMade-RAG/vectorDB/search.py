@@ -1,9 +1,6 @@
 import os
 
 from dotenv import load_dotenv
-from fastembed import SparseTextEmbedding
-from fastembed.rerank.cross_encoder import TextCrossEncoder
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -32,31 +29,47 @@ CACHE_COLLECTION_NAME = "semantic-query-cache"
 qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=60.0)
 
 
-if not qdrant_client.collection_exists(CACHE_COLLECTION_NAME):
-    qdrant_client.create_collection(
-        collection_name=CACHE_COLLECTION_NAME,
-        vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
-    )
+reranker = None
+dense_embedder = None
+sparse_embedder = None
+reranker = None
 
-    # 👈 Tell Qdrant to build a turbo-fast index for our language filter!
-    qdrant_client.create_payload_index(
-        collection_name=CACHE_COLLECTION_NAME,
-        field_name="language",
-        field_schema=PayloadSchemaType.KEYWORD,
-    )
+def init_services():
+    global reranker, sparse_embedder, dense_embedder
+    
+    # Import inside the function to avoid macOS top-level proxy freeze during Uvicorn startup
+    print("Loading AI libraries (this might take a moment)...")
+    from fastembed import SparseTextEmbedding
+    from fastembed.rerank.cross_encoder import TextCrossEncoder
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    
+    print("Checking Qdrant collections...")
+    if not qdrant_client.collection_exists(CACHE_COLLECTION_NAME):
+        qdrant_client.create_collection(
+            collection_name=CACHE_COLLECTION_NAME,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+        )
+        # Tell Qdrant to build a turbo-fast index for our language filter!
+        qdrant_client.create_payload_index(
+            collection_name=CACHE_COLLECTION_NAME,
+            field_name="language",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+    
+    print("Loading models (dense, sparse, and reranker)...")
+    if dense_embedder is None:
+        dense_embedder = GoogleGenerativeAIEmbeddings(
+            model="models/gemini-embedding-2",
+            google_api_key=GOOGLE_API_KEY,
+            output_dimensionality=1536,
+        )
+    if sparse_embedder is None:
+        sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
+    if reranker is None:
+        reranker = TextCrossEncoder(model_name="Xenova/ms-marco-MiniLM-L-6-v2")
+    print("Services ready!")
 
-
-dense_embedder = GoogleGenerativeAIEmbeddings(
-    model="models/gemini-embedding-2",
-    google_api_key=GOOGLE_API_KEY,
-    output_dimensionality=1536,
-)
-
-sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
-
-# Cross-encoder reranker: reads (query + chunk) together for precise relevance scoring
-# Downloaded once and cached locally on first run (~85 MB)
-reranker = TextCrossEncoder(model_name="Xenova/ms-marco-MiniLM-L-6-v2")
+# reranker is now initialized in init_services() to prevent import hanging
 
 
 def run_hybrid_search(question: str, top_k: int = 6):

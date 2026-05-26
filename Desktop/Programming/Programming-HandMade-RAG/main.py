@@ -1,6 +1,13 @@
 import os
 import sys
 import uuid
+import urllib.request
+
+# FIX MACOS PROXY HANG BUG:
+# On some Macs, Python's network libraries freeze while trying to read system proxies.
+# We bypass it completely here before any other libraries load.
+urllib.request.getproxies = lambda: {}
+
 from typing import Annotated
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
@@ -18,10 +25,18 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from contextlib import asynccontextmanager
 from agent.lang_graph import RagState, compile_all
-from vectorDB.search import CACHE_COLLECTION_NAME, dense_embedder, qdrant_client
+from vectorDB import search
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This runs exactly once when the server starts
+    search.init_services()
+    yield
+    # This runs exactly once when the server shuts down
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -107,9 +122,9 @@ async def users_chat(
     except:
         user_lang = "en"
 
-    query_vector = dense_embedder.embed_query(message)
-    cache_results = qdrant_client.query_points(
-        collection_name=CACHE_COLLECTION_NAME,
+    query_vector = search.dense_embedder.embed_query(message)
+    cache_results = search.qdrant_client.query_points(
+        collection_name=search.CACHE_COLLECTION_NAME,
         query=query_vector,
         limit=1,
         query_filter=Filter(
@@ -138,8 +153,8 @@ async def users_chat(
     final_answer = result["messages"][-1].content
 
     if "I am an AI assistant specialized" not in final_answer:
-        qdrant_client.upsert(
-            collection_name=CACHE_COLLECTION_NAME,
+        search.qdrant_client.upsert(
+            collection_name=search.CACHE_COLLECTION_NAME,
             points=[
                 PointStruct(
                     id=str(uuid.uuid4()),
@@ -174,9 +189,9 @@ async def users_chat_stream(
     except:
         user_lang = "en"
 
-    query_vector = dense_embedder.embed_query(message)
-    cache_results = qdrant_client.query_points(
-        collection_name=CACHE_COLLECTION_NAME,
+    query_vector = search.dense_embedder.embed_query(message)
+    cache_results = search.qdrant_client.query_points(
+        collection_name=search.CACHE_COLLECTION_NAME,
         query=query_vector,
         limit=1,
         query_filter=Filter(
@@ -234,8 +249,8 @@ async def users_chat_stream(
 
             # Finished — write answer to Qdrant semantic cache
             if final_answer and "I am an AI assistant specialized" not in final_answer:
-                qdrant_client.upsert(
-                    collection_name=CACHE_COLLECTION_NAME,
+                search.qdrant_client.upsert(
+                    collection_name=search.CACHE_COLLECTION_NAME,
                     points=[
                         PointStruct(
                             id=str(uuid.uuid4()),

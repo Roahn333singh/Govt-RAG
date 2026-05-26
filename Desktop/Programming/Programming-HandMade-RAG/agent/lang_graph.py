@@ -7,25 +7,24 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from langchain_core.messages import AIMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import START, MessagesState, StateGraph
-
 from vectorDB.search import run_hybrid_search
 
 load_dotenv()
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=GOOGLE_API_KEY,
-    temperature=0.7,
-    # streaming=True removed — with Pydantic v2, ainvoke() on a streaming LLM
-    # returns AIMessageChunk instead of AIMessage. LangGraph's add_messages
-    # reducer then tries to merge it using positional args (AIMessage(chunk.content))
-    # which Pydantic v2 rejects with: "BaseModel.__init__() takes 1 positional argument".
-    # stream_mode="updates" on graph.astream() handles response delivery instead.
-)
+_llm = None
+
+def get_llm():
+    global _llm
+    if _llm is None:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        _llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            google_api_key=GOOGLE_API_KEY,
+            temperature=0.7,
+        )
+    return _llm
 
 
 class RagState(MessagesState):
@@ -59,7 +58,7 @@ Rules:
 User Question: {user_query}
 Optimized Search Query:"""
 
-    response = await llm.ainvoke(prompt)
+    response = await get_llm().ainvoke(prompt)
     search_query = response.content.strip()
     print(f"🔍 Rewritten: '{user_query}' → '{search_query}'")
     return {"search_query": search_query}
@@ -111,7 +110,7 @@ Context:
 Question: {state["messages"][-1].content}
 Answer:"""
 
-    response = await llm.ainvoke(prompt)
+    response = await get_llm().ainvoke(prompt)
     return {"messages": [response]}
 
 
