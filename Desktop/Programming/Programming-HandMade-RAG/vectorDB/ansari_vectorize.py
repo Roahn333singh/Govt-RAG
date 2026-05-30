@@ -112,7 +112,7 @@ def extract_text_with_ocr(filepath: str):
             print(f"      - OCR page {i}/{num_pages}", end="\r")
             images = convert_from_path(filepath, first_page=i, last_page=i, dpi=200)
             if images:
-                text = pytesseract.image_to_string(images[0])
+                text = pytesseract.image_to_string(images[0], lang='hin+eng')
                 if text.strip():
                     extracted_docs.append(Document(page_content=text, metadata={"page": i - 1, "source": filepath}))
                 images[0].close()
@@ -121,9 +121,24 @@ def extract_text_with_ocr(filepath: str):
     print()  # newline after progress
     return extracted_docs
 
+def is_krutidev_gibberish(text: str) -> bool:
+    """Detect if the text is legacy non-Unicode (Kruti Dev) gibberish."""
+    kd_markers = ['¼', '½', 'ç', '¶', 'ñ', 'gS', 'ds', 'esa', 'dh', 'vkSj', 'djus', 'fofufnZ"V', 'x;s', 'tk;s']
+    count = sum(1 for marker in kd_markers if marker in text)
+    # If we find 2 or more distinct Kruti Dev markers in the text, it's highly likely gibberish
+    return count >= 2
+
 def is_text_extractable(docs) -> bool:
     total_text = "".join(d.page_content for d in docs).strip()
-    return len(total_text) > 50
+    if len(total_text) <= 50:
+        return False
+        
+    # Check if the extracted text is actually Kruti Dev gibberish
+    if is_krutidev_gibberish(total_text[:2000]):
+        print("    [OCR Trigger] Detected Kruti Dev gibberish encoding. Forcing OCR...")
+        return False
+        
+    return True
 
 # ── Chunker ────────────────────────────────────────────────────────────────────
 def split_document(docs, chunk_size=900, chunk_overlap=150):
@@ -153,14 +168,19 @@ def build_points(chunks, file_metadata: dict, dense_embedder, sparse_embedder) -
             dense_vecs.extend(batch_dense_vecs)
             time.sleep(1) # Small sleep to avoid typical rate limits
         except Exception as e:
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                print("      ⚠️  Rate limit — sleeping 60 s then retrying...")
+            error_str = str(e)
+            if any(err in error_str for err in ["429", "RESOURCE_EXHAUSTED", "503", "500", "UNAVAILABLE"]):
+                print(f"      ⚠️  API Error ({error_str.split()[0]}) — sleeping 60 s then retrying...")
                 time.sleep(60)
                 print("      🔄 Retrying batch...")
-                batch_dense_vecs = dense_embedder.embed_documents(batch)
-                if len(batch_dense_vecs) != len(batch):
-                    batch_dense_vecs = [dense_embedder.embed_documents([text])[0] for text in batch]
-                dense_vecs.extend(batch_dense_vecs)
+                try:
+                    batch_dense_vecs = dense_embedder.embed_documents(batch)
+                    if len(batch_dense_vecs) != len(batch):
+                        batch_dense_vecs = [dense_embedder.embed_documents([text])[0] for text in batch]
+                    dense_vecs.extend(batch_dense_vecs)
+                except Exception as inner_e:
+                    print(f"      ❌ Second attempt failed: {inner_e}")
+                    raise inner_e
             else:
                 raise
 
@@ -235,11 +255,22 @@ def ingest_ansari_folder(qdrant_client, dense_embedder, sparse_embedder):
     print("=" * 60)
 
     all_files = []
-    for root, _, filenames in os.walk(ANSARI_ROOT):
-        for fname in filenames:
-            ext = os.path.splitext(fname)[1].lower()
-            if ext in SUPPORTED_EXTENSIONS and not fname.startswith("."):
-                all_files.append(os.path.join(root, fname))
+    
+    # Optional: Allow passing a single file path as argument for targeted re-ingestion
+    if len(sys.argv) > 1:
+        target_file = sys.argv[1]
+        if os.path.exists(target_file):
+            all_files.append(target_file)
+            print(f"  🎯 Targeted ingestion for single file: {target_file}")
+        else:
+            print(f"  ❌ Targeted file not found: {target_file}")
+            return
+    else:
+        for root, _, filenames in os.walk(ANSARI_ROOT):
+            for fname in filenames:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in SUPPORTED_EXTENSIONS and not fname.startswith("."):
+                    all_files.append(os.path.join(root, fname))
 
     total = len(all_files)
     if total == 0:
@@ -336,8 +367,11 @@ if __name__ == "__main__":
             sparse_vectors_config={SPARSE_VECTOR_NAME: SparseVectorParams()},
         )
 
-    # 1. Clear existing database points
-    clear_qdrant_collection(qdrant_client)
+    # 1. Clear existing database points only if running a full ingestion
+    if len(sys.argv) <= 1:
+        clear_qdrant_collection(qdrant_client)
+    else:
+        print("⏭️  Skipping collection clear because this is a targeted single-file ingestion.")
 
     # 2. Ingest ansari AI folder completely
     ingest_ansari_folder(qdrant_client, dense_embedder, sparse_embedder)

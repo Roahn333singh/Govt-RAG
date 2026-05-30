@@ -12,18 +12,19 @@ from vectorDB.search import run_hybrid_search
 
 load_dotenv(override=True)
 
-_llm = None
 
-def get_llm():
-    global _llm
-    if _llm is None:
+_llm_cache = {}
+
+def get_llm(temperature=0.7):
+    global _llm_cache
+    if temperature not in _llm_cache:
         from langchain_google_genai import ChatGoogleGenerativeAI
-        _llm = ChatGoogleGenerativeAI(
+        _llm_cache[temperature] = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
-            temperature=0.7,
+            google_api_key=os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"),
+            temperature=temperature,
         )
-    return _llm
+    return _llm_cache[temperature]
 
 
 class RagState(MessagesState):
@@ -45,22 +46,25 @@ async def query_rewriter_node(state: RagState):
 The database contains PDFs about government portals, departments, schemes, FAQs,
 canal/irrigation policy, IT systems, establishment rules, and legal acts.
 
-Rewrite the user's question into a short, keyword-dense search query (max 20 words)
-that will retrieve the most relevant document chunks from the database.
+The documents in the database are written in a mix of Devanagari Hindi and English.
+Some chapters use Devanagari terms (e.g., "निविदा समिति", "करोड़"), while others use English terms (e.g., "tender committee", "crore").
+
+Optimize the user's question into a bilingual, keyword-dense search query (max 20 words) for retrieving the most relevant document chunks.
 
 Rules:
-- Remove filler words like "can you tell me", "what is", "please explain", etc.
-- IMPORTANT TRANSLITERATION RULE: The database documents are written in Devanagari Hindi (e.g., निविदा समिति) and proper English. If the user asks in "Hinglish" (Hindi written using the English alphabet, e.g., "nivida samiti kya hai"), you MUST transliterate/translate the keywords into proper Devanagari Hindi (e.g., "निविदा समिति") to ensure keyword matching works.
-- If the query contains standard English technical terms (like "Bid Capacity"), keep them in English.
-- Output ONLY the rewritten query. No explanation. No punctuation at the end.
+1. Strip all conversational filler (e.g., "can you tell me", "what is", "how to").
+2. Translate and pair key technical terms and concepts into BOTH proper English and Devanagari Hindi (e.g., "tender निविदा", "committee समिति", "bid capacity निविदा क्षमता").
+3. For monetary amounts and numbers, include both forms (e.g. "10 crore 10 करोड़", "50 lakh 50 लाख", "10000").
+4. Output ONLY the optimized bilingual search query, separated by spaces. No explanation, no punctuation.
 
 User Question: {user_query}
 Optimized Search Query:"""
 
-    response = await get_llm().ainvoke(prompt)
+    response = await get_llm(temperature=0.0).ainvoke(prompt)
     search_query = response.content.strip()
     print(f"🔍 Rewritten: '{user_query}' → '{search_query}'")
     return {"search_query": search_query}
+
 
 
 # ── Node 2: Retriever ──────────────────────────────────────────────────────────
@@ -109,7 +113,7 @@ Context:
 Question: {state["messages"][-1].content}
 Answer:"""
 
-    response = await get_llm().ainvoke(prompt)
+    response = await get_llm(temperature=0.1).ainvoke(prompt)
     return {"messages": [response]}
 
 
