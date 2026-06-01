@@ -211,6 +211,28 @@
       .replace(/>/g, "&gt;");
   }
 
+  function parseMarkdown(text) {
+    // 1. Escape HTML first for safety
+    let html = String(text ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // 2. Bold: **text** (non-word-boundary regex guarantees match on Devanagari/Hindi strings)
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+
+    // 3. Headings: ### Heading or ## Heading or # Heading
+    html = html.replace(/(?:^|\n)(?:###|##|#)\s+(.*?)(?=\n|$)/g, '<div style="font-weight:700;font-size:1.15em;margin-top:12px;margin-bottom:6px;">$1</div>');
+
+    // 4. Nested bullets (must be matched before top-level bullets)
+    html = html.replace(/(?:^|\n)\s+(?:[-•*◦]|\&middot\;)\s+(.*?)(?=\n|$)/g, '<div style="margin-left:20px;display:flex;align-items:flex-start;margin-top:3px;"><span style="margin-right:6px;color:#888;">◦</span><span>$1</span></div>');
+
+    // 5. Top-level bullets
+    html = html.replace(/(?:^|\n)(?:[-•*])\s+(.*?)(?=\n|$)/g, '<div style="margin-left:8px;display:flex;align-items:flex-start;margin-top:4px;"><span style="margin-right:6px;color:inherit;">•</span><span>$1</span></div>');
+
+    return html;
+  }
+
   function appendTyping(bodyEl, color) {
     const wrap = document.createElement("div");
     wrap.className = "cw-msg bot";
@@ -227,7 +249,7 @@
   function appendMsg(bodyEl, role, text) {
     const el = document.createElement("div");
     el.className = `cw-msg ${role}`;
-    el.innerHTML = safeText(text);
+    el.innerHTML = role === "bot" ? parseMarkdown(text) : safeText(text);
     bodyEl.appendChild(el);
     bodyEl.scrollTop = bodyEl.scrollHeight;
     return el;
@@ -253,7 +275,7 @@
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (reduceMotion) {
-      el.innerHTML = safeText(content);
+      el.innerHTML = parseMarkdown(content);
       bodyEl.scrollTop = bodyEl.scrollHeight;
       return el;
     }
@@ -261,9 +283,11 @@
     const baseDelay = Math.max(4, Number(speed) || DEFAULTS.typewriterSpeed);
     const step = content.length > 1200 ? 3 : content.length > 600 ? 2 : 1;
 
+    let currentText = "";
     for (let i = 0; i < content.length; i += step) {
       const chunk = content.slice(i, i + step);
-      el.innerHTML += safeText(chunk);
+      currentText += chunk;
+      el.innerHTML = safeText(currentText);
       bodyEl.scrollTop = bodyEl.scrollHeight;
 
       const lastChar = chunk[chunk.length - 1] || "";
@@ -273,6 +297,8 @@
       await sleep(pause);
     }
 
+    el.innerHTML = parseMarkdown(content);
+    bodyEl.scrollTop = bodyEl.scrollHeight;
     return el;
   }
 

@@ -107,6 +107,12 @@ Answer the user's question primarily based on the context provided below.
 If the user asks for the definition of a term (like 'Arbitration' or 'Tender') that appears in the context, you may use your general knowledge to define it, but you MUST then explain how it is used within the provided context.
 If the question is completely unrelated to the context, say that you don't have enough information.
 
+Formatting Rules for UI Compatibility (Strict):
+1. Headings: Use standard markdown headers (### Heading) to structure sections.
+2. Lists & Bullets: Always use standard hyphens (`- `) or asterisks (`* `) followed by a single space for list items.
+3. Nested Lists: For sub-points, indent with four spaces and use a hyphen (e.g., `    - Sub-point`).
+4. Bold Emphasis: Use standard markdown bold `**Key Term**` for emphasis or point headers.
+
 Context:
 {state["context"]}
 
