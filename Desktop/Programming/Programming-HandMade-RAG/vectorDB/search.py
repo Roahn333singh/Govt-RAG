@@ -102,7 +102,7 @@ def run_hybrid_search(question: str, top_k: int = 6):
                 limit=40,  # was 25
             ),
         ],
-        query=FusionQuery(fusion=Fusion.RRF),
+        query=FusionQuery(fusion=Fusion.RRF), # Recipocal Rank Fusion
         limit=25,  # was 15 — give reranker a wider pool to work with
     ).points
 

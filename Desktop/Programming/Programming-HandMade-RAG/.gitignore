@@ -1,0 +1,53 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data directories (large binary files, not needed to run the app)
+data/
+extra_data/
+some_more_data/
+Nivida docs/
+vittpath2021 docs/
+ansari AI/
+
+# Temporary / scratch files
+scratch/
+scratch.py
+ISO_Ai_helpdesk_Document
+
+# Agent skill (internal tooling)
+my-rag-skill/
+
+# Python version manager
+.python-version
+
+# Deployment (removed)
+render.yaml

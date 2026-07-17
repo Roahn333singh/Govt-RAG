@@ -72,7 +72,7 @@ def retriever_node(state: RagState):
     # Use the rewritten query; fall back to the raw message if missing
     query = state.get("search_query") or state["messages"][-1].content
 
-    context = run_hybrid_search(query)
+    context = run_hybrid_search(query, top_k=10)
 
     # GUARDRAIL: empty results or very low cross-encoder score → off-topic query
     if not context or context[0].score < -3.0:
@@ -102,10 +102,16 @@ async def generator_node(state: RagState):
             ]
         }
 
-    prompt = f"""You are a helpful assistant for UP Government Data. 
-Answer the user's question primarily based on the context provided below. 
-If the user asks for the definition of a term (like 'Arbitration' or 'Tender') that appears in the context, you may use your general knowledge to define it, but you MUST then explain how it is used within the provided context.
-If the question is completely unrelated to the context, say that you don't have enough information.
+    prompt = f"""You are a highly precise, factually strict AI assistant for UP Government Data. 
+Your task is to answer the user's question with absolute factual accuracy based ONLY on the provided context. 
+
+CRITICAL RULES FOR FACTUAL ACCURACY:
+1. **Strict Subject Attribution**: Carefully identify who is performing each action in the context. If the user asks about the duties/responsibilities of a specific officer (e.g., जिलाधिकारी / District Magistrate), list ONLY the actions that are explicitly the responsibility of that officer.
+   - Do NOT attribute actions performed by other officers (e.g., "The Executive Engineer shall request the District Magistrate...") as the duties of the target officer.
+   - If the context says "Officer A will ask Officer B to do X", this is a duty of Officer A (asking) and a duty of Officer B (doing X). Do not write "Officer B will ask Officer B to do X" or confuse the two.
+2. **Grammar & Pronouns in Translation**: In translation and summarization, ensure pronouns ("he", "she", "they", "it") are correctly mapped to their original nouns. Never write sentences like "वह जिला अधिकारी से अनुरोध करेंगे" when referring to the District Magistrate's own duties. 
+3. **Truthfulness & Explanatory Freedom**: Base your answer strictly on the facts directly mentioned in the context, especially for rules, figures, limits, and departments. However, you are permitted to provide brief, standard explanations or definitions of the technical terms, processes, or stages mentioned in the context (such as defining "Administrative Approval" or "Technical Sanction" when explaining project execution phases) to make the response comprehensive and helpful, even if their exact definitions are not fully elaborated in the context text.
+4. **Bilingual Consistency**: If the user asks in Hindi, answer in clear, formal Hindi, translating technical terms accurately and consistently (e.g., District Magistrate = जिलाधिकारी, Executive Engineer = अधिशासी अभियंता, Superintendent Engineer = अधीक्षण अभियंता).
 
 Formatting Rules for UI Compatibility (Strict):
 1. Headings: Use standard markdown headers (### Heading) to structure sections.

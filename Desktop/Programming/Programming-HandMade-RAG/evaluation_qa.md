@@ -164,3 +164,23 @@ This document contains a curated list of sample questions and expected answers d
 
 **34. Question:** (Hindi) सामान्य भविष्य निधि (GPF) के अंतर्गत अंशदान करने की शक्ति सरकार को किस मूल नियम के तहत प्राप्त है?
 **Expected Answer:** उत्तर प्रदेश सरकार को अपने सरकारी सेवकों को भविष्य निधि में अंशदान करने के लिए निर्देशित करने की शक्ति "मूल नियम 16" (Fundamental Rule 16) के अंतर्गत प्राप्त है। (Source: vittpath 2021.pdf)
+
+**35. Question:** What was the first ADCP produced as an adaptation of, and in what year?
+**Expected Answer:** The first ADCP was produced as an adaptation of a commercial Doppler speed log in the year 1979 (by Rowe and Young). (Source: ADCP_PPT.pdf)
+
+**36. Question:** During which decade did Acoustic based instruments become the most common instrument type for flow measurements?
+**Expected Answer:** In the 2000s, acoustic based instruments became the most common instrument type for flow measurements. (Source: ADCP_PPT.pdf)
+
+**37. Question:** (Hindi) पोर्टल पर ऑपरेटर द्वारा किए गए डाटा अपडेशन या डिलीशन को कौन अप्रूव (Approve) करता है जिसके बाद ही वह प्रभावी होता है?
+**Expected Answer:** ऑपरेटर द्वारा इनिशिएट किया गया कोई भी डाटा अपडेशन या डिलीशन DDO (डी-डी-ओ - Drawing and Disbursing Officer) द्वारा अप्रूव होने पर ही प्रभावी होता है। (Source: vittpath 2021.pdf)
+
+**38. Question:** (Hindi) अखिल भारतीय सेवा के सदस्यों के लिए चिकित्सा व्यय प्रतिपूर्ति की व्यवस्था किस नियमावली के तहत लागू होती है?
+**Expected Answer:** अखिल भारतीय सेवा के सदस्यों के लिए चिकित्सा व्यय प्रतिपूर्ति की व्यवस्था "चिकित्सा परिचर्या नियमावली" (Medical Attendance Rules) में वर्णित व्यवस्थाओं के अनुसार लागू होती है। (Source: vittpath 2021.pdf)
+
+### 📂 Source: Forced OCR Documents (`vittpath 2021.pdf` & `Nivida Path.pdf`)
+
+**39. Question:** (Hindi) मूल कार्यों की परियोजना के निष्पादन हेतु प्रारम्भिक स्वीकृतियाँ किसके द्वारा और कैसे दी जाती हैं?
+**Expected Answer:** *(This specifically tests the Kruti Dev -> Unicode OCR fallback we just built. The system should read the newly embedded, perfectly translated Hindi chunks and provide the exact approval flow for original work projects.)*
+
+**40. Question:** (Hindi) टेंडर या निविदा (Nivida) प्रक्रिया के दौरान एकल बिड (single bid) प्राप्त होने पर क्या नियम लागू होते हैं?
+**Expected Answer:** *(Tests the massive 149-page `Nivida Path.pdf` which is currently being ingested. The AI should extract the exact rules regarding single bids.)*
