@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html class="h-full" lang="hi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Manual AI · सिंचाई एवं जल संसाधन विभाग</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Serif:wght@500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        ink: "#04122e",
+        parchment: "#fff9ec",
+        paper: "#faf3e5",
+        rule: "#dfd9cb",
+        terracotta: "#9f410a",
+        forest: "#1f6b4a",
+        mute: "#5f6b7c",
+      },
+      fontFamily: {
+        display: ['"Noto Serif"', "serif"],
+        sans: ['Figtree', "system-ui", "sans-serif"],
+      },
+    },
+  },
+};
+</script>
+<link rel="stylesheet" href="./stitch-bridge.css?v=410"/>
+<script>
+  if (localStorage.getItem("manual_ai_theme") === "dark") {
+    document.documentElement.classList.add("dark-theme");
+  }
+</script>
+</head>
+<body class="h-full overflow-hidden bg-parchment text-ink font-sans antialiased">
+
+<header class="flex-none h-14 border-b border-rule bg-paper flex items-center justify-between px-4 gap-3">
+  <div class="flex items-center gap-3 min-w-0">
+    <button type="button" id="btn-toggle-sidebar" class="mobile-toggle lg:hidden p-2 rounded border border-rule text-mute" aria-label="Menu">
+      <span class="material-symbols-outlined text-[20px]">menu</span>
+    </button>
+    <div class="w-9 h-9 rounded bg-ink text-parchment grid place-items-center font-display font-bold text-lg shrink-0">म</div>
+    <div class="min-w-0">
+      <div class="flex items-center gap-2">
+        <h1 class="font-display font-bold text-lg leading-none truncate">Manual AI</h1>
+        <span class="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide uppercase bg-emerald-50 text-forest border border-emerald-200">
+          <span class="w-1.5 h-1.5 rounded-full bg-forest"></span>
+          <span data-i18n="online">Online</span>
+        </span>
+      </div>
+      <p class="text-xs text-mute truncate" data-i18n="dept">सिंचाई एवं जल संसाधन विभाग · उत्तर प्रदेश</p>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <button type="button" id="btn-toggle-lang" class="h-9 px-2.5 rounded border border-rule text-mute text-xs font-semibold tracking-wide hover:bg-white/60 inline-flex items-center gap-1" title="English / हिंदी" aria-label="Toggle language">
+      <span class="lang-en">EN</span>
+      <span class="opacity-40">/</span>
+      <span class="lang-hi">हिं</span>
+    </button>
+    <button type="button" id="btn-new-chat" class="hidden sm:inline-flex items-center gap-1.5 h-9 px-3 rounded bg-ink text-parchment text-sm font-semibold hover:bg-[#1a2744] transition-colors">
+      <span class="material-symbols-outlined text-[18px]">add</span>
+      <span data-i18n="new_session">नया सत्र</span>
+    </button>
+    <button type="button" id="btn-toggle-inspector" class="mobile-toggle xl:hidden p-2 rounded border border-rule text-mute" aria-label="Sources">
+      <span class="material-symbols-outlined text-[20px]">menu_book</span>
+    </button>
+    <button type="button" id="btn-toggle-theme" class="w-9 h-9 grid place-items-center rounded border border-rule text-mute hover:bg-white/60" aria-label="Theme">
+      <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="archival-desk flex h-[calc(100%-3.5rem)] overflow-hidden">
+
+  <aside id="sidebar" class="w-[260px] flex-none border-r border-rule bg-paper flex flex-col overflow-hidden">
+    <div class="p-3 border-b border-rule sm:hidden">
+      <button type="button" class="w-full h-10 rounded bg-ink text-parchment text-sm font-semibold" onclick="document.getElementById('btn-new-chat').click()">
+        <span data-i18n="new_session_full">+ नया सत्र</span>
+      </button>
+    </div>
+    <div class="px-3 pt-3 pb-2">
+      <p class="text-[10px] font-bold tracking-wider uppercase text-terracotta" data-i18n="suggested">सुझाए गए प्रश्न</p>
+    </div>
+    <nav class="flex-1 overflow-y-auto px-2 pb-3 space-y-1 custom-scrollbar">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the official URL for the Pragati Portal?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_pragati">प्रगति पोर्टल URL</p>
+        <p class="text-[11px] text-mute mt-0.5">G.O. Tech / २०२३</p>
+      </button>
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the maximum file size allowed for uploading attachments on the IGRS portal?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_igrs">IGRS अधिकतम फाइल साइज</p>
+        <p class="text-[11px] text-mute mt-0.5">शासनादेश 412/IGRS/24</p>
+      </button>
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="200 crore se zyada ke project cost ke liye financial approval dene ki authority kiske paas hoti hai?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_200cr">₹200 करोड़+ स्वीकृति</p>
+        <p class="text-[11px] text-mute mt-0.5" data-i18n="nav_200cr_meta">वित्तीय हस्तपुस्तिका</p>
+      </button>
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="निविदा समिति के कार्य क्या हैं?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_tender">निविदा समिति के कार्य</p>
+        <p class="text-[11px] text-mute mt-0.5">PWD Manual Ch. 42</p>
+      </button>
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the constitutional basis for a government servant's tenure?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_310">अनुच्छेद ३१० · सेवा अवधि</p>
+        <p class="text-[11px] text-mute mt-0.5" data-i18n="nav_310_meta">सिविल सेवा नियमावली</p>
+      </button>
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What are the financial powers of a Chief Engineer?">
+        <p class="text-sm font-semibold leading-snug" data-i18n="nav_ce">मुख्य अभियंता के वित्तीय अधिकार</p>
+        <p class="text-[11px] text-mute mt-0.5">Delegation of Powers</p>
+      </button>
+    </nav>
+    <div class="p-3 border-t border-rule text-[10px] text-mute text-center">UP-IWRD Manual Desk</div>
+  </aside>
+
+  <main class="workspace flex-1 flex flex-col min-w-0 min-h-0 bg-parchment">
+    <section id="thread" class="thread flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-6 py-5">
+      <div id="hero" class="hero max-w-2xl mx-auto pt-8 sm:pt-14 space-y-6">
+        <div class="text-center space-y-2">
+          <p class="text-[11px] font-bold tracking-widest uppercase text-terracotta" data-i18n="hero_eyebrow">अभिलेख परामर्श</p>
+          <h2 class="font-display text-3xl sm:text-4xl font-bold text-ink">Manual AI</h2>
+          <p class="text-mute text-sm sm:text-base max-w-md mx-auto leading-relaxed" data-i18n="hero_blurb">
+            नियमावलियों और शासनादेशों से सत्यापित उत्तर। हिंदी या अंग्रेज़ी में पूछें।
+          </p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="Under what conditions can a single-bid tender be accepted?">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip1_tag">निविदा</p>
+            <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip1">एकल बोली निविदा कब स्वीकार्य?</p>
+          </button>
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="What are the financial powers of a Chief Engineer?">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip2_tag">वित्त</p>
+            <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip2">मुख्य अभियंता की वित्तीय शक्तियाँ</p>
+          </button>
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="On what date was the IGRS (Jan-Sunwai) system implemented at the district level?">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta">IGRS</p>
+            <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip3">जन-सुनवाई जिला स्तर पर कब लागू?</p>
+          </button>
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="What is the constitutional basis for a government servant's tenure?">
+            <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip4_tag">अधिष्ठान</p>
+            <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip4">सरकारी सेवक की सेवा अवधि का आधार</p>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="composer flex-none border-t border-rule bg-paper px-4 sm:px-6 py-3">
+      <div class="max-w-2xl mx-auto">
+        <div id="composer-box" class="flex items-end gap-2 rounded-lg border border-rule bg-parchment focus-within:border-ink p-2 transition-colors">
+          <textarea id="composer-input" rows="1" autofocus
+            class="composer__input flex-1 resize-none bg-transparent border-0 focus:ring-0 text-sm text-ink placeholder:text-mute/80 py-2 px-2 max-h-28"
+            data-i18n-placeholder="ask_placeholder"
+            placeholder="प्रश्न लिखें… (Hindi or English)"></textarea>
+          <button type="button" id="btn-send" disabled
+            class="composer__send shrink-0 h-10 px-4 rounded bg-ink text-parchment text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1a2744] transition-colors">
+            <span data-i18n="ask">पूछें</span>
+            <span class="material-symbols-outlined text-[16px]">send</span>
+          </button>
+        </div>
+        <p class="composer__meta text-center text-[10px] text-mute mt-2" data-i18n="disclaimer">उत्तर प्रशासनिक परामर्श हेतु। अंतिम निर्णय हेतु अधिकृत अधिसूचना मान्य।</p>
+      </div>
+    </footer>
+  </main>
+
+  <aside id="inspector" class="inspector w-[300px] flex-none border-l border-rule bg-paper flex flex-col overflow-hidden">
+    <div class="inspector__header flex items-center justify-between px-4 py-3 border-b border-rule">
+      <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[18px] text-forest">verified</span>
+        <span class="text-sm font-bold" data-i18n="source_desk">स्रोत पटल</span>
+      </div>
+      <button type="button" id="btn-close-inspector" class="inspector__close p-1 rounded border border-rule text-mute xl:hidden" aria-label="Close">
+        <span class="material-symbols-outlined text-[18px]">close</span>
+      </button>
+    </div>
+    <div id="inspector-body" class="inspector__body flex-1 overflow-y-auto p-4 custom-scrollbar">
+      <div class="inspector__empty flex flex-col items-center justify-center text-center h-full min-h-[200px] px-4">
+        <div class="empty-mark font-display text-3xl text-rule mb-2">॥</div>
+        <h4 class="text-sm font-semibold text-ink mb-1" data-i18n="empty_title">कोई अंश खुला नहीं</h4>
+        <p class="text-xs text-mute leading-relaxed" data-i18n="empty_body">उत्तर में स्रोत बैज पर क्लिक करें — मूल नियमावली अंश यहाँ दिखेगा।</p>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script src="./script.js?v=410"></script>
+</body>
+</html>

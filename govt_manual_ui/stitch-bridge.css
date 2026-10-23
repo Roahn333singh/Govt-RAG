@@ -1,0 +1,407 @@
+/* Manual AI — clean desk bridge for script.js message chrome */
+
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c5c6ce;
+  border-radius: 2px;
+}
+
+.msg {
+  max-width: 42rem;
+  margin: 0 auto 1rem;
+  animation: bridgeRise 0.35s ease both;
+}
+
+.msg--user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg__bubble {
+  max-width: min(100%, 32rem);
+  padding: 0.7rem 0.95rem;
+  border-radius: 0.5rem 0.5rem 0.125rem 0.5rem;
+  background: #04122e;
+  color: #fff9ec;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.memo-card {
+  background: #fff;
+  color: #1e1c13;
+  border: 1px solid #dfd9cb;
+  border-radius: 0.375rem;
+  border-left: 3px solid #9f410a;
+  overflow: hidden;
+}
+
+.memo-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0.55rem;
+  border-bottom: 1px solid #f0ebe0;
+}
+
+.memo-card__origin {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memo-card__seal {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  display: grid;
+  place-items: center;
+  background: #04122e;
+  color: #fff9ec;
+  font-family: "Noto Serif", serif;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.memo-card__department {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5f6b7c;
+}
+
+.memo-card__meta {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #5f6b7c;
+}
+
+.memo-card__body {
+  padding: 0.9rem 1rem 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.memo-card__body h1,
+.memo-card__body h2,
+.memo-card__body h3 {
+  font-family: "Noto Serif", serif;
+  margin: 0.65em 0 0.3em;
+}
+
+.memo-card__body ul {
+  padding-left: 1.15em;
+  margin: 0.35em 0;
+}
+
+.memo-card__body strong {
+  color: #9f410a;
+}
+
+.memo-card__sources {
+  padding: 0.45rem 1rem 0.2rem;
+}
+
+.sources-title {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #5f6b7c;
+  margin-bottom: 0.4rem;
+}
+
+.sources-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.25rem;
+  border: 1px solid #7bc49e;
+  background: #eef7f2;
+  color: #1f6b4a;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.memo-card__actions {
+  padding: 0.55rem 1rem 0.85rem;
+}
+
+.btn-memo-action {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dfd9cb;
+  background: #faf3e5;
+  color: #04122e;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-memo-action.copied,
+.btn-memo-action:hover {
+  border-color: #1f6b4a;
+  color: #1f6b4a;
+}
+
+.shimmer-memo {
+  background: #fff;
+  border: 1px solid #dfd9cb;
+  border-radius: 0.375rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shimmer-line {
+  height: 0.65rem;
+  border-radius: 0.125rem;
+  background: linear-gradient(90deg, #efe9db, #fff9ec, #efe9db);
+  background-size: 200% 100%;
+  animation: bridgeShimmer 1.1s linear infinite;
+}
+
+.shimmer-line--1 { width: 88%; }
+.shimmer-line--2 { width: 72%; }
+.shimmer-line--3 { width: 94%; }
+.shimmer-line--4 { width: 56%; }
+
+.cite-card {
+  background: #fff;
+  border: 1px solid #dfd9cb;
+  border-radius: 0.375rem;
+  padding: 0.9rem;
+}
+
+.cite-card__doc {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9f410a;
+}
+
+.cite-card__title {
+  font-family: "Noto Serif", serif;
+  font-size: 1rem;
+  margin: 0.45rem 0 0.3rem;
+  color: #04122e;
+}
+
+.cite-card__loc {
+  font-size: 0.72rem;
+  color: #5f6b7c;
+  margin-bottom: 0.65rem;
+}
+
+.cite-card__text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #2d3b55;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.cite-card__copy {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid #dfd9cb;
+  background: #faf3e5;
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Dark theme — high-contrast parchment night desk */
+html.dark-theme body,
+html.dark-theme .bg-parchment {
+  background: #0f1218 !important;
+  color: #eef1f7 !important;
+}
+html.dark-theme .bg-paper,
+html.dark-theme header,
+html.dark-theme #sidebar,
+html.dark-theme #inspector,
+html.dark-theme .composer {
+  background: #171b24 !important;
+}
+html.dark-theme .border-rule { border-color: #2f3645 !important; }
+html.dark-theme .text-ink,
+html.dark-theme .font-display { color: #eef1f7 !important; }
+html.dark-theme .text-mute { color: #a8b0c0 !important; }
+html.dark-theme .text-terracotta { color: #ff9a5c !important; }
+html.dark-theme .text-forest { color: #6dcea0 !important; }
+html.dark-theme .text-rule { color: #5a6478 !important; }
+
+html.dark-theme .chip,
+html.dark-theme #composer-box {
+  background: #222836 !important;
+  border-color: #3a4254 !important;
+  color: #eef1f7 !important;
+}
+html.dark-theme .chip:hover {
+  background: #2a3142 !important;
+  border-color: #ff9a5c !important;
+}
+html.dark-theme .nav-btn:hover {
+  background: #222836 !important;
+  border-color: #3a4254 !important;
+}
+html.dark-theme .composer__input,
+html.dark-theme #composer-input {
+  color: #eef1f7 !important;
+}
+html.dark-theme .composer__input::placeholder,
+html.dark-theme #composer-input::placeholder {
+  color: #8b94a7 !important;
+}
+
+html.dark-theme .msg__bubble {
+  background: #3d4d72;
+  color: #f5f7fb;
+}
+
+/* Memo cards: light text on dark panels (fixes invisible answers) */
+html.dark-theme .memo-card,
+html.dark-theme .shimmer-memo,
+html.dark-theme .cite-card {
+  background: #1e2430 !important;
+  border-color: #3a4254 !important;
+  color: #eef1f7 !important;
+}
+html.dark-theme .memo-card {
+  border-left-color: #ff9a5c !important;
+}
+html.dark-theme .memo-card__header {
+  border-bottom-color: #2f3645 !important;
+}
+html.dark-theme .memo-card__department,
+html.dark-theme .memo-card__meta,
+html.dark-theme .sources-title,
+html.dark-theme .cite-card__loc {
+  color: #a8b0c0 !important;
+}
+html.dark-theme .memo-card__body,
+html.dark-theme .memo-card__body p,
+html.dark-theme .memo-card__body li,
+html.dark-theme .cite-card__text {
+  color: #eef1f7 !important;
+}
+html.dark-theme .memo-card__body h1,
+html.dark-theme .memo-card__body h2,
+html.dark-theme .memo-card__body h3,
+html.dark-theme .cite-card__title {
+  color: #ffffff !important;
+}
+html.dark-theme .memo-card__body strong,
+html.dark-theme .cite-card__doc {
+  color: #ff9a5c !important;
+}
+html.dark-theme .memo-card__seal {
+  background: #3d4d72;
+  color: #f5f7fb;
+}
+html.dark-theme .btn-memo-action,
+html.dark-theme .cite-card__copy {
+  background: #2a3142 !important;
+  border-color: #4a5368 !important;
+  color: #eef1f7 !important;
+}
+html.dark-theme .btn-memo-action:hover,
+html.dark-theme .btn-memo-action.copied,
+html.dark-theme .cite-card__copy:hover {
+  border-color: #6dcea0 !important;
+  color: #6dcea0 !important;
+}
+html.dark-theme .source-badge {
+  background: #1a2e26 !important;
+  border-color: #3d7a5c !important;
+  color: #8fdcb4 !important;
+}
+html.dark-theme .shimmer-line {
+  background: linear-gradient(90deg, #2a3142, #3a4254, #2a3142);
+  background-size: 200% 100%;
+}
+html.dark-theme .bg-emerald-50 {
+  background: #1a2e26 !important;
+  border-color: #3d7a5c !important;
+  color: #8fdcb4 !important;
+}
+html.dark-theme header button.border-rule,
+html.dark-theme #btn-toggle-lang {
+  border-color: #3a4254 !important;
+  color: #c5cddb !important;
+  background: transparent;
+}
+html.dark-theme header button.border-rule:hover,
+html.dark-theme #btn-toggle-lang:hover {
+  background: #222836 !important;
+  color: #eef1f7 !important;
+}
+#btn-toggle-lang .lang-active {
+  color: #9f410a;
+  font-weight: 700;
+}
+html.dark-theme #btn-toggle-lang .lang-active {
+  color: #ff9a5c;
+  font-weight: 700;
+}
+
+/* Drawers on smaller screens */
+@media (max-width: 1279px) {
+  #inspector {
+    position: fixed;
+    top: 3.5rem;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    width: min(320px, 92vw);
+    transform: translateX(105%);
+    transition: transform 0.25s ease;
+    box-shadow: -8px 0 24px rgba(4, 18, 46, 0.1);
+  }
+  #inspector.is-active { transform: translateX(0); }
+}
+
+@media (max-width: 1023px) {
+  #sidebar {
+    position: fixed;
+    top: 3.5rem;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    width: min(280px, 88vw);
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: 8px 0 24px rgba(4, 18, 46, 0.1);
+  }
+  #sidebar.is-active { transform: translateX(0); }
+}
+
+@keyframes bridgeRise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bridgeShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

@@ -1,0 +1,64 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+Icon
+
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data directories (large binary files, not needed to run the app)
+data/
+extra_data/
+some_more_data/
+ansari AI/
+
+# Temporary / scratch files
+scratch/
+scratch.py
+ISO_Ai_helpdesk_Document
+
+# Agent skill (internal tooling)
+my-rag-skill/
+
+# Python version manager
+.python-version
+
+# Logs / local noise
+*.log
+server_output.log
+skipped_files.log
+trace_output*.log
+
+# Docs corpora (large; keep out of deploy image)
+Nivida docs/
+vittpath2021 docs/
+
+# Local stitch scratch
+govt_manual_ui/stitch_welcome.html

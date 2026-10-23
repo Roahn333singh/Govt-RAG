@@ -1,0 +1,36 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+*.log
+server_output.log
+skipped_files.log
+trace_output.log
+trace_output_unbuffered.log
+data/
+extra_data/
+some_more_data/
+ansari AI/
+ISO_Ai_helpdesk_Document/
+Nivida docs/
+vittpath2021 docs/
+scratch/
+scratch.py
+my-rag-skill/
+i055.site/
+.DS_Store
+*.md
+!README.md
+evaluation_qa.md
+nivida_evaluation_qa.md
+chunked_docs_inventory.csv
+.dockerignore
+Dockerfile
+deploy.sh
