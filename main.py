@@ -38,6 +38,7 @@ from agent.guards import (
     is_injection,
     validate_message_length,
 )
+from agent.security import real_client_ip
 from vectorDB import search
 
 # Cache policy
@@ -60,17 +61,10 @@ _REFUSAL_MARKERS = (
 )
 
 
-def _client_ip(request: Request) -> str:
-    """Prefer first X-Forwarded-For hop (Cloud Run)."""
-    xff = request.headers.get("x-forwarded-for") or ""
-    if xff:
-        return xff.split(",")[0].strip()
-    if request.client:
-        return request.client.host or "unknown"
-    return "unknown"
+CHAT_RATE_MINUTE = os.getenv("CHAT_RATE_MINUTE", "15/minute")
+CHAT_RATE_DAY = os.getenv("CHAT_RATE_DAY", "100/day")
 
-
-limiter = Limiter(key_func=_client_ip)
+limiter = Limiter(key_func=real_client_ip)
 
 
 def get_compile_all():
@@ -313,8 +307,8 @@ if os.path.isdir(_UI_DIR):
 
 
 @app.post("/chat")
-@limiter.limit("10/minute")
-@limiter.limit("100/day")
+@limiter.limit(CHAT_RATE_MINUTE)
+@limiter.limit(CHAT_RATE_DAY)
 async def users_chat(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],
@@ -406,8 +400,8 @@ async def users_chat(
 
 
 @app.post("/chat/stream")
-@limiter.limit("10/minute")
-@limiter.limit("100/day")
+@limiter.limit(CHAT_RATE_MINUTE)
+@limiter.limit(CHAT_RATE_DAY)
 async def users_chat_stream(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],

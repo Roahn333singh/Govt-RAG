@@ -26,4 +26,17 @@ dependencies = [
     "pytesseract>=0.3.13",
     "openai>=3.37.0",
     "langchain-openai>=1.7.2",
+    "redis>=8.1.0",
+    "cachetools>=7.2.6",
+    "httpx>=0.28.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
