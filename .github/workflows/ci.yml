@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev
+      - run: uv run pytest -q
+
+  gold:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev
+      - name: Core gold set
+        env:
+          APP_API_KEY: ${{ secrets.APP_API_KEY }}
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+        run: uv run python eval/run_gold.py --url "$EVAL_BASE_URL" --subset core --gate
