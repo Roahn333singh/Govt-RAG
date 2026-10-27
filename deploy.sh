@@ -135,6 +135,13 @@ if [[ "${SKIP_EVAL:-0}" != "1" ]]; then
   APP_API_KEY="$(gcloud secrets versions access latest --secret=APP_API_KEY --project="${PROJECT_ID}")"
   export APP_API_KEY
   if .venv/bin/python scripts/run_eval.py --base "${CANDIDATE_URL}" --skip-gold; then
+    if [[ "${RUN_GOLD:-0}" == "1" ]]; then
+      echo "==> Core gold set (40 questions)"
+      if ! .venv/bin/python eval/run_gold.py --url "${CANDIDATE_URL}" --subset core --gate; then
+        echo "==> Gold gate FAILED — traffic NOT shifted."
+        exit 1
+      fi
+    fi
     echo "==> Eval passed — shifting 100% traffic to new revision"
     gcloud run services update-traffic "${SERVICE}" \
       --region "${REGION}" \
