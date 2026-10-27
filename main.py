@@ -1,6 +1,8 @@
 import asyncio
 import json
 import os
+import re
+import sys
 import time
 import uuid
 import urllib.request
@@ -8,8 +10,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Annotated
 
-# FIX MACOS PROXY HANG BUG
-urllib.request.getproxies = lambda: {}
+# macOS system proxies hang urllib during startup. Leave other platforms alone.
+if sys.platform == "darwin":
+    urllib.request.getproxies = lambda: {}
 
 os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
 os.environ.setdefault("LANGSMITH_TRACING", "false")
@@ -18,6 +21,7 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+from cachetools import TTLCache
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -60,6 +64,26 @@ REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "90"))
 MAX_INFLIGHT_LLM = int(os.getenv("MAX_INFLIGHT_LLM", "6"))
 _llm_slots = asyncio.Semaphore(MAX_INFLIGHT_LLM)
 BUSY_DETAIL = "Service busy, please retry"
+# Exact repeat of a question, checked before any embedding call.
+_exact_cache: TTLCache = TTLCache(
+    maxsize=512, ttl=float(os.getenv("EXACT_CACHE_TTL_SECONDS", "300"))
+)
+
+
+def _norm_question(message: str) -> str:
+    return re.sub(r"\s+", " ", (message or "").strip().lower())
+
+
+def _recall_exact(message: str, language: str):
+    return _exact_cache.get((_norm_question(message), language))
+
+
+def _remember_exact(message: str, language: str, answer: str, sources: list) -> None:
+    if _is_cacheable_answer(answer, sources, message):
+        _exact_cache[(_norm_question(message), language)] = {
+            "answer": answer,
+            "sources": sources,
+        }
 
 _REFUSAL_MARKERS = (
     "I am an AI assistant specialized",
@@ -357,7 +381,7 @@ def _chat_response(
 
 @app.get("/health")
 async def health_chk():
-    return {"status": "ok"}
+    return {"status": "ok", "git_sha": os.getenv("GIT_SHA", "dev")}
 
 
 @app.get("/ready")
@@ -437,6 +461,11 @@ async def users_chat(
 
     try:
         async def _run_chat():
+            remembered = _recall_exact(message, user_lang)
+            if remembered:
+                return _chat_response(
+                    remembered["answer"], remembered["sources"], session_id, cached=True
+                )
             query_vector = await asyncio.to_thread(
                 search.dense_embedder.embed_query, message
             )
@@ -483,6 +512,7 @@ async def users_chat(
                 await _write_cache(
                     message, final_answer, user_lang, query_vector, sources
                 )
+            _remember_exact(message, user_lang, final_answer, sources)
 
             return _chat_response(final_answer, sources, session_id, cached=False)
 
@@ -520,6 +550,23 @@ async def users_chat_stream(
         return StreamingResponse(refusal_stream(), media_type="text/event-stream")
 
     try:
+        remembered = _recall_exact(message, user_lang)
+        if remembered:
+
+            async def exact_stream():
+                for piece in _text_chunks(remembered["answer"]):
+                    yield _sse({"type": "token", "text": piece})
+                yield _sse(
+                    {
+                        "type": "done",
+                        "sources": remembered["sources"],
+                        "session_id": session_id,
+                        "cached": True,
+                    }
+                )
+
+            return StreamingResponse(exact_stream(), media_type="text/event-stream")
+
         query_vector = await asyncio.to_thread(
             search.dense_embedder.embed_query, message
         )
@@ -602,6 +649,7 @@ async def users_chat_stream(
                         await _write_cache(
                             message, final_answer, user_lang, query_vector, sources
                         )
+                    _remember_exact(message, user_lang, final_answer, sources)
                 yield _sse(
                     {
                         "type": "done",

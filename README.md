@@ -188,7 +188,7 @@ uv run streamlit run frontend.py
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Health check — returns `{"status": "ok"}` |
+| `GET` | `/health` | Health check — `{"status": "ok", "git_sha": "..."}` |
 | `POST` | `/chat` | Send a question, get a complete answer |
 | `POST` | `/chat/stream` | Send a question, get a streaming (SSE) answer |
 
@@ -200,6 +200,22 @@ uv run streamlit run frontend.py
 - **The web UI** at `/ui/` calls `GET /ui/session` (same-origin only, checked via `Sec-Fetch-Site`) and gets a 30-minute HMAC token bound to the caller's IP. It sends that token as `X-Session-Token`. A determined script can still mimic the browser, so the per-IP rate limit (15/minute, 100/day, shared through Redis) remains the real cost ceiling; the token stops casual anonymous use of the API.
 
 CORS only allows origins listed in `ALLOWED_ORIGINS` (default: the Cloud Run URL).
+
+### Environment and secrets
+
+Nothing secret is baked into the image. `deploy.sh` reads these from Secret Manager and passes them with `--update-secrets`:
+
+| Secret | Purpose |
+|---|---|
+| `OPENROUTER_API_KEY` | Chat model and embeddings |
+| `CLUSTER_ENDPOINT` | Qdrant URL |
+| `QDRANT_API_KEY` | Qdrant key |
+| `APP_API_KEY` | `X-API-Key` for scripts. Created on first deploy if missing |
+| `SESSION_SIGNING_KEY` | HMAC key for UI session tokens |
+| `ADMIN_TOKEN` | `X-Admin-Token` for `POST /admin/cache/purge` |
+| `RATE_LIMIT_STORAGE_URI` | Upstash `rediss://` URL. Optional; without it, limits are per instance |
+
+Plain environment (set in the deploy env file, not secret): `OPENROUTER_LLM_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, `OPENROUTER_EMBEDDING_DIMENSIONS`, `RERANKER_MODEL`, `ALLOWED_ORIGINS`, `DOC_VERSION`, `GIT_SHA`. `ENABLE_DOCS=1` turns `/docs` back on. `REJECT_THRESHOLD` retunes the reranker floor.
 
 ### Example Request
 

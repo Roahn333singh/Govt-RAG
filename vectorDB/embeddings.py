@@ -10,12 +10,11 @@ Configuration (environment):
     OPENROUTER_EMBEDDING_DIMENSIONS default: 1536
 """
 
-import json
 import os
 import random
 import time
-import urllib.error
-import urllib.request
+
+import httpx
 
 OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
 DEFAULT_MODEL = "qwen/qwen3-embedding-8b"
@@ -62,6 +61,14 @@ class OpenRouterEmbeddings:
         self.batch_size = batch_size
         self.timeout = timeout
         self.max_retries = max_retries
+        # One pooled client for the process. httpx.Client is safe to share across threads.
+        self._http = httpx.Client(
+            timeout=timeout,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+        )
 
     # ── Internal request with retry ──────────────────────────────────────
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -70,22 +77,13 @@ class OpenRouterEmbeddings:
             "input": texts,
             "dimensions": self.dimensions,
         }
-        body = json.dumps(payload).encode("utf-8")
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
-            request = urllib.request.Request(
-                OPENROUTER_EMBEDDINGS_URL,
-                data=body,
-                method="POST",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-            )
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as resp:
-                    data = json.load(resp)
+                response = self._http.post(OPENROUTER_EMBEDDINGS_URL, json=payload)
+                response.raise_for_status()
+                data = response.json()
                 items = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
                 vectors = [item["embedding"] for item in items]
                 if len(vectors) != len(texts):
@@ -100,12 +98,12 @@ class OpenRouterEmbeddings:
                             f"expected {self.dimensions}."
                         )
                 return vectors
-            except urllib.error.HTTPError as e:
-                detail = e.read().decode("utf-8", errors="replace")[:500]
-                last_error = RuntimeError(f"OpenRouter HTTP {e.code}: {detail}")
-                if e.code not in _RETRYABLE_STATUS:
+            except httpx.HTTPStatusError as e:
+                detail = e.response.text[:500]
+                last_error = RuntimeError(f"OpenRouter HTTP {e.response.status_code}: {detail}")
+                if e.response.status_code not in _RETRYABLE_STATUS:
                     raise last_error from e
-            except (urllib.error.URLError, TimeoutError, RuntimeError) as e:
+            except (httpx.HTTPError, TimeoutError, RuntimeError) as e:
                 last_error = e
 
             if attempt < self.max_retries - 1:

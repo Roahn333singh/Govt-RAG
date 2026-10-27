@@ -86,6 +86,18 @@ def test_stale_doc_version_is_a_miss(client, fakes):
     assert r.json()["cached"] is False
 
 
+def test_exact_repeat_skips_embedding(client, fakes):
+    body = {"message": "What is the Pragati portal used for?"}
+    assert client.post("/chat", json=body, headers=API_HEADERS).json()["cached"] is False
+    again = client.post("/chat", json=body, headers=API_HEADERS).json()
+    assert again["cached"] is True
+    assert fakes.embedder.calls == 1
+
+
+def test_health_reports_git_sha(client):
+    assert client.get("/health").json()["git_sha"] == "testsha"
+
+
 def test_cache_write_has_doc_version(client, fakes):
     client.post("/chat", json={"message": "What is the Pragati portal used for?"}, headers=API_HEADERS)
     assert fakes.qdrant.points
