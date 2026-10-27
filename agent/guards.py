@@ -226,6 +226,50 @@ def sanitize_rewrite(raw: str, fallback: str, max_words: int = 30) -> str:
     return line
 
 
+_REFUSAL_PHRASES = (
+    "I am an AI assistant specialized",
+    "does not contain any information",
+    "does not contain information about",
+    "no information about",
+    "does not specify",
+    "do not explicitly list",
+    "कोई जानकारी उपलब्ध नहीं",
+    "जानकारी उपलब्ध नहीं है",
+    "I can only answer questions about UP Government",
+    "not in the documents",
+    "provided documents do not",
+    "I cannot answer",
+)
+
+
+def is_refusal(answer: str | None) -> bool:
+    if not answer:
+        return True
+    return any(phrase in answer for phrase in _REFUSAL_PHRASES)
+
+
+def cited_sources(answer: str | None, sources: list | None) -> list:
+    """Keep chunks the answer actually cites. Refusals cite nothing.
+
+    With no Sources line, fall back to the first three chunks that were used.
+    """
+    sources = list(sources or [])
+    if is_refusal(answer):
+        return []
+    match = re.search(r"(?is)sources:\s*(.+)$", answer or "")
+    if not match:
+        return sources[:3]
+    tail = match.group(1).lower()
+    kept = []
+    for src in sources:
+        doc = str(src.get("source_document") or "")
+        stem = doc.rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+        page = src.get("page_start")
+        if stem and stem in tail and (page is None or str(page) in tail):
+            kept.append(src)
+    return kept or sources[:3]
+
+
 def sources_from_hits(hits: Iterable, max_chars: int = 1500) -> list[dict]:
     """Map Qdrant hit payloads → UI-friendly source dicts."""
     out: list[dict] = []

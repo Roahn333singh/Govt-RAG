@@ -32,6 +32,7 @@ from agent.guards import (
     PROMPT_VERSION,
     REFUSAL_TEXT,
     answer_echoes_markers,
+    cited_sources,
     detect_answer_language,
     filter_output,
     is_injection,
@@ -319,7 +320,7 @@ def _chat_response(
 ) -> dict:
     return {
         "answer": answer,
-        "sources": sources or [],
+        "sources": cited_sources(answer, sources),
         "session_id": session_id,
         "cached": cached,
     }
@@ -447,6 +448,7 @@ async def users_chat(
                 sources = []
             else:
                 final_answer = filtered
+            sources = cited_sources(final_answer, sources)
 
             if _is_cacheable_answer(final_answer, sources, message):
                 await _write_cache(

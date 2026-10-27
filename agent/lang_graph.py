@@ -13,6 +13,7 @@ from vectorDB.search import run_hybrid_search
 
 from agent.guards import (
     PROMPT_VERSION,
+    cited_sources,
     detect_answer_language,
     parse_bilingual_rewrite,
     sources_from_hits,
@@ -235,7 +236,8 @@ Context:
 Answer:"""
 
     response = await get_llm(temperature=0.1).ainvoke(prompt)
-    return {"messages": [response], "sources": state.get("sources") or []}
+    text = response.content if isinstance(response.content, str) else ""
+    return {"messages": [response], "sources": cited_sources(text, state.get("sources"))}
 
 
 # ── Graph Assembly ─────────────────────────────────────────────────────────────
