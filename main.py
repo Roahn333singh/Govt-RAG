@@ -49,7 +49,11 @@ from vectorDB import search
 # Cache policy
 CACHE_SIM_THRESHOLD = 0.95
 CACHE_TTL_SECONDS = 7 * 24 * 3600  # 7 days — shorter TTL limits poison dwell time
-REQUEST_TIMEOUT_SECONDS = 120
+REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "90"))
+# Per-instance cap on concurrent graph runs (LLM + rerank); others queue.
+MAX_INFLIGHT_LLM = int(os.getenv("MAX_INFLIGHT_LLM", "6"))
+_llm_slots = asyncio.Semaphore(MAX_INFLIGHT_LLM)
+BUSY_DETAIL = "Service busy, please retry"
 
 _REFUSAL_MARKERS = (
     "I am an AI assistant specialized",
@@ -297,6 +301,20 @@ async def _write_cache(
     )
 
 
+def _busy_response(session_id: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "5"},
+        content={
+            "detail": BUSY_DETAIL,
+            "answer": "The desk is busy. Please retry your question in a few seconds.",
+            "sources": [],
+            "session_id": session_id,
+            "cached": False,
+        },
+    )
+
+
 def _chat_response(
     answer: str,
     sources: list | None,
@@ -386,16 +404,17 @@ async def users_chat(
             print("Asking processor to think...")
             graph = get_compile_all()()
             config = {"configurable": {"thread_id": session_id}}
-            result = await graph.ainvoke(
-                {
-                    "messages": [{"role": "user", "content": message}],
-                    "session_id": session_id,
-                    "answer_language": user_lang,
-                    "query_vector": query_vector,
-                    "sources": [],
-                },
-                config,
-            )
+            async with _llm_slots:
+                result = await graph.ainvoke(
+                    {
+                        "messages": [{"role": "user", "content": message}],
+                        "session_id": session_id,
+                        "answer_language": user_lang,
+                        "query_vector": query_vector,
+                        "sources": [],
+                    },
+                    config,
+                )
             final_answer = result["messages"][-1].content
             sources = result.get("sources") or []
 
@@ -416,28 +435,11 @@ async def users_chat(
         return await asyncio.wait_for(_run_chat(), timeout=REQUEST_TIMEOUT_SECONDS)
 
     except asyncio.TimeoutError:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Request timed out. Please try again in a moment.",
-                "answer": "The desk is busy. Please retry your question.",
-                "sources": [],
-                "session_id": session_id,
-                "cached": False,
-            },
-        )
+        print(f"/chat timeout after {REQUEST_TIMEOUT_SECONDS}s")
+        return _busy_response(session_id)
     except Exception as e:
         print(f"/chat error: {type(e).__name__}: {e}")
-        return JSONResponse(
-            status_code=503,
-            content={
-                "detail": "Temporary processing failure. Please retry.",
-                "answer": "Unable to retrieve an answer right now. Please try again.",
-                "sources": [],
-                "session_id": session_id,
-                "cached": False,
-            },
-        )
+        return _busy_response(session_id)
 
 
 @app.post("/chat/stream")

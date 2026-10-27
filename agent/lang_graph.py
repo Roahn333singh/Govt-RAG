@@ -28,6 +28,8 @@ _compiled_graph = None
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 _DEFAULT_LLM = "google/gemini-2.5-flash"
 
+REWRITER_TIMEOUT_SECONDS = float(os.getenv("REWRITER_TIMEOUT_SECONDS", "15"))
+
 # Cap total context chars sent to the generator
 _MAX_CONTEXT_CHARS = 12_000
 # MiniLM English-oriented; keep permissive floor for Hindi hits
@@ -50,8 +52,8 @@ def get_llm(temperature=0.7):
             base_url=_OPENROUTER_BASE,
             temperature=temperature,
             max_tokens=2048,
-            timeout=60,
-            max_retries=1,
+            timeout=45,
+            max_retries=2,
             streaming=True,
         )
     return _llm_cache[temperature]
@@ -99,8 +101,16 @@ Examples:
 </user_question>
 Optimized Search Query:"""
 
-    response = await get_llm(temperature=0.0).ainvoke(prompt)
-    search_query = sanitize_rewrite(response.content or "", fallback=user_query)
+    try:
+        response = await asyncio.wait_for(
+            get_llm(temperature=0.0).ainvoke(prompt), timeout=REWRITER_TIMEOUT_SECONDS
+        )
+        raw_rewrite = response.content or ""
+    except Exception as e:
+        # Retrieval on the raw question is still useful; don't fail the request.
+        print(f"⚠️  Rewriter failed ({type(e).__name__}); using raw question")
+        raw_rewrite = ""
+    search_query = sanitize_rewrite(raw_rewrite, fallback=user_query)
     print(f"🔍 Rewritten: '{user_query[:60]}' → '{search_query[:80]}'")
     return {"search_query": search_query, "answer_language": answer_language}
 

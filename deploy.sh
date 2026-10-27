@@ -83,7 +83,8 @@ done
 
 echo "==> Deploy Cloud Run service: ${SERVICE} (no traffic yet)"
 # Secrets must already exist in Secret Manager — never bake .env into the image.
-# 8Gi + concurrency 4: retest still saw miss-path 503s at 4 concurrent under 4Gi/8.
+# 8Gi x 5 instances = the 40Gi regional quota. Concurrency 20 per instance;
+# MAX_INFLIGHT_LLM (default 6) queues the expensive graph work inside it.
 # Keep one warm instance so cold-start + model load does not eat the request budget.
 gcloud run deploy "${SERVICE}" \
   --image "${IMAGE}" \
@@ -92,9 +93,9 @@ gcloud run deploy "${SERVICE}" \
   --allow-unauthenticated \
   --memory 8Gi \
   --cpu 2 \
-  --concurrency 4 \
+  --concurrency 20 \
   --cpu-boost \
-  --timeout 300 \
+  --timeout 120 \
   --max-instances 5 \
   --min-instances "${MIN_INSTANCES:-1}" \
   --startup-probe="httpGet.path=/ready,initialDelaySeconds=10,timeoutSeconds=10,periodSeconds=10,failureThreshold=18" \

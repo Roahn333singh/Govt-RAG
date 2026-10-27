@@ -31,7 +31,7 @@ RRF_CANDIDATES = 28
 qdrant_client = QdrantClient(
     url=QDRANT_URL,
     api_key=QDRANT_API_KEY,
-    timeout=30.0,
+    timeout=int(os.getenv("QDRANT_TIMEOUT_SECONDS", "15")),
     check_compatibility=False,
 )
 

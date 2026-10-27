@@ -12,6 +12,7 @@ Configuration (environment):
 
 import json
 import os
+import random
 import time
 import urllib.error
 import urllib.request
@@ -108,10 +109,11 @@ class OpenRouterEmbeddings:
                 last_error = e
 
             if attempt < self.max_retries - 1:
-                delay = min(2.0, 1.0 * (2**attempt))
+                # Jitter so concurrent retries don't hit OpenRouter in lockstep
+                delay = min(2.0, 0.5 * (2**attempt)) + random.uniform(0, 0.5)
                 print(
                     f"      ⚠️  Embedding request failed ({last_error}); "
-                    f"retrying in {delay:.0f}s..."
+                    f"retrying in {delay:.1f}s..."
                 )
                 time.sleep(delay)
 
