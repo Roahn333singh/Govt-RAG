@@ -45,8 +45,8 @@ class OpenRouterEmbeddings:
         model: str | None = None,
         dimensions: int | None = None,
         batch_size: int = 32,
-        timeout: float = 120.0,
-        max_retries: int = 5,
+        timeout: float = 20.0,
+        max_retries: int = 2,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
@@ -108,7 +108,7 @@ class OpenRouterEmbeddings:
                 last_error = e
 
             if attempt < self.max_retries - 1:
-                delay = min(30.0, 2.0 * (2**attempt))
+                delay = min(2.0, 1.0 * (2**attempt))
                 print(
                     f"      ⚠️  Embedding request failed ({last_error}); "
                     f"retrying in {delay:.0f}s..."

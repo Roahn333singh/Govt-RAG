@@ -11,18 +11,15 @@
  */
 
 // ── API config ─────────────────────────────────────────────────
-// Served from FastAPI at /ui → same origin. Opened as a file → localhost:8000.
-const API_BASE = (() => {
-    if (typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
-        const { hostname, port, origin } = window.location;
-        if (hostname === "127.0.0.1" || hostname === "localhost") {
-            // Prefer same-origin when UI is mounted under the API (e.g. /ui).
-            if (port === "8000" || port === "") return origin;
-        }
-    }
-    return "http://127.0.0.1:8000";
-})();
+// Served from FastAPI at /ui (local or Cloud Run) → same origin.
+// Opened as file:// → local API on :8000.
+// Always same-origin when served over http(s). Never point Cloud Run at localhost.
+const API_BASE =
+    typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)
+        ? window.location.origin
+        : "http://127.0.0.1:8000";
 const CHAT_URL = `${API_BASE}/chat`;
+console.info("[Manual AI] chat endpoint:", CHAT_URL);
 
 // ── State ──────────────────────────────────────────────────────
 let sessionId = null;
