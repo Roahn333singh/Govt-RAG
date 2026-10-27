@@ -129,6 +129,16 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception):
+    request_id = uuid.uuid4().hex[:12]
+    print(f"unhandled {request_id}: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal error", "request_id": request_id},
+    )
+
 _ALLOWED_ORIGINS = [
     o.strip()
     for o in (
@@ -154,6 +164,9 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
@@ -576,6 +589,8 @@ async def users_chat_stream(
                                     sources = output["sources"]
 
                 filtered = filter_output(final_answer, message)
+                if filtered and filtered != final_answer:
+                    yield _sse({"type": "replace", "text": filtered})
                 if filtered is None:
                     final_answer = INJECTION_REFUSAL
                     sources = []

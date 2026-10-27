@@ -144,13 +144,21 @@ def answer_echoes_markers(question: str, answer: str) -> bool:
     return any(m in upper for m in extract_caller_markers(question or ""))
 
 
+_HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
+
+
+def strip_html(text: str) -> str:
+    return _HTML_TAG_RE.sub("", text or "")
+
+
 def filter_output(answer: str, question: str | None = None) -> str | None:
     """Return None if the answer looks like a prompt/context leak or marker echo.
 
     A "Sources:" block listing many Document/Page lines is normal; only the raw
     context layout (Document / Page / Text) counts as a dump.
     """
-    if not answer:
+    answer = strip_html(answer)
+    if not answer.strip():
         return None
     for p in _OUTPUT_LEAK_PATTERNS:
         if p.search(answer):
