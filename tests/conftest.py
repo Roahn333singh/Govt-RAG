@@ -73,10 +73,23 @@ class FakeQdrant:
         return True
 
     def scroll(self, *a, **k):
-        return [], None
+        return list(self.points), None
 
-    def delete(self, *a, **k):
-        return None
+    def delete(self, collection_name=None, points_selector=None, **k):
+        ids = {str(i) for i in getattr(points_selector, "points", [])}
+        self.points = [p for p in self.points if str(p.id) not in ids]
+
+    def count(self, *a, **k):
+        return SimpleNamespace(count=len(self.points))
+
+    def delete_collection(self, *a, **k):
+        self.points = []
+
+    def create_collection(self, *a, **k):
+        return True
+
+    def create_payload_index(self, *a, **k):
+        return True
 
 
 class FakeGraph:

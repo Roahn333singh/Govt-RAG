@@ -32,23 +32,27 @@ from agent.guards import (
     PROMPT_VERSION,
     REFUSAL_TEXT,
     answer_echoes_markers,
-    cache_lexical_ok,
     detect_answer_language,
     filter_output,
     is_injection,
     validate_message_length,
 )
+from agent.cache_policy import (
+    CACHE_SIM_THRESHOLD,
+    doc_version,
+    entry_fresh,
+    is_premise_correction,
+    questions_match,
+)
 from agent.security import (
     SESSION_TOKEN_TTL_SECONDS,
+    admin_token_ok,
     issue_session_token,
     real_client_ip,
     require_client,
 )
-from vectorDB import search
+from vectorDB import cache_admin, search
 
-# Cache policy
-CACHE_SIM_THRESHOLD = 0.95
-CACHE_TTL_SECONDS = 7 * 24 * 3600  # 7 days — shorter TTL limits poison dwell time
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "90"))
 # Per-instance cap on concurrent graph runs (LLM + rerank); others queue.
 MAX_INFLIGHT_LLM = int(os.getenv("MAX_INFLIGHT_LLM", "6"))
@@ -227,26 +231,11 @@ def _is_cacheable_answer(
     # Never cache answers to soft-instruction / marker-bearing questions
     if question and is_injection(question):
         return False
+    if question and is_premise_correction(question, answer):
+        return False
     if not sources:
         return False
     return True
-
-
-def _cache_entry_fresh(payload: dict) -> bool:
-    if payload.get("prompt_version") != PROMPT_VERSION:
-        return False
-    created = payload.get("created_at")
-    if not created:
-        return False
-    try:
-        # ISO or unix
-        if isinstance(created, (int, float)):
-            ts = float(created)
-        else:
-            ts = datetime.fromisoformat(str(created).replace("Z", "+00:00")).timestamp()
-        return (time.time() - ts) <= CACHE_TTL_SECONDS
-    except Exception:
-        return False
 
 
 def _query_cache_sync(query_vector: list, user_lang: str):
@@ -270,11 +259,11 @@ async def _lookup_cache(message: str, user_lang: str, query_vector: list):
         return None
     payload = hit.payload or {}
     cached_q = payload.get("question") or ""
-    if not cache_lexical_ok(message, cached_q):
-        print(f"❌ CACHE MISS. Lexical overlap too low for score {hit.score:.2f}")
+    if not questions_match(message, cached_q):
+        print(f"❌ CACHE MISS. Wording/numbers differ at score {hit.score:.2f}")
         return None
-    if not _cache_entry_fresh(payload):
-        print("❌ CACHE MISS. Stale prompt_version or TTL expired")
+    if not entry_fresh(payload):
+        print("❌ CACHE MISS. Stale prompt/doc version or TTL expired")
         return None
     print(f"✅ CACHE HIT! Match Confidence: {hit.score:.2f}")
     return payload
@@ -301,6 +290,7 @@ async def _write_cache(
                     "sources": sources,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "prompt_version": PROMPT_VERSION,
+                    "doc_version": doc_version(),
                 },
             )
         ],
@@ -363,6 +353,33 @@ async def ui_session(request: Request):
         "token": issue_session_token(real_client_ip(request)),
         "expires_in": SESSION_TOKEN_TTL_SECONDS,
     }
+
+
+class CachePurgeRequest(BaseModel):
+    contains: str | list[str] | None = None
+    all: bool = False
+    dry_run: bool = False
+
+
+@app.post("/admin/cache/purge", include_in_schema=False)
+@limiter.limit("10/minute")
+async def admin_cache_purge(request: Request, body: CachePurgeRequest):
+    if not admin_token_ok(request.headers.get("x-admin-token")):
+        raise HTTPException(status_code=401, detail="Invalid admin token.")
+    needles = [body.contains] if isinstance(body.contains, str) else body.contains
+    needles = [n for n in (needles or []) if n and n.strip()]
+    if not body.all and not needles:
+        raise HTTPException(status_code=422, detail='Send {"contains": "..."} or {"all": true}.')
+    result = await asyncio.to_thread(
+        cache_admin.purge,
+        search.qdrant_client,
+        needles=needles,
+        wipe=body.all,
+        dry_run=body.dry_run,
+        collection=search.CACHE_COLLECTION_NAME,
+    )
+    print(f"admin cache purge: all={body.all} needles={needles} -> {result['deleted']} deleted")
+    return result
 
 
 _UI_DIR = os.path.join(os.path.dirname(__file__), "govt_manual_ui")

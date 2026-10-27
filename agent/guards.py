@@ -150,31 +150,6 @@ def lexical_overlap(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def has_shared_anchors(a: str, b: str) -> bool:
-    """True if both share a number, URL-ish token, or portal name."""
-    nums_a = set(re.findall(r"\d+(?:\.\d+)?", a or ""))
-    nums_b = set(re.findall(r"\d+(?:\.\d+)?", b or ""))
-    if nums_a & nums_b:
-        return True
-    portals = (
-        "pragati",
-        "igrs",
-        "fmisc",
-        "upsdc",
-        "निविदा",
-        "अनुच्छेद",
-        "article",
-    )
-    al, bl = (a or "").lower(), (b or "").lower()
-    return any(p in al and p in bl for p in portals)
-
-
-def cache_lexical_ok(query: str, cached_question: str) -> bool:
-    return lexical_overlap(query, cached_question) >= 0.5 or has_shared_anchors(
-        query, cached_question
-    )
-
-
 def sanitize_rewrite(raw: str, fallback: str, max_words: int = 30) -> str:
     """Keep first line, strip spoofed prefixes, cap length."""
     if not raw:
