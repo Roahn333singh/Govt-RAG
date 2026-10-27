@@ -25,36 +25,37 @@ INJECTION_REFUSAL = (
     "reveal my prompt, or invent answers."
 )
 
+# Only instruction-override / output-control phrasing. Never domain words
+# ("rules", "penalty", "disciplinary", "instructions for filling a form").
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
     for p in (
-        r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions?",
-        r"disregard\s+(all\s+)?(previous|prior|above|earlier)",
-        r"forget\s+(all\s+)?(your\s+)?(rules|instructions|guidelines)",
-        r"you\s+are\s+now\s+(?:DAN|jailbroken|unrestricted)",
-        r"repeat\s+(verbatim\s+)?(the\s+)?(full\s+)?(text\s+of\s+)?(the\s+)?(instructions?|rules|system\s+prompt)",
-        r"print\s+(the\s+)?(raw\s+)?(context|system\s+prompt|instructions?)",
-        r"output\s+exactly\s*:",
-        r"optimized\s+search\s+query\s*:",
-        r"reveal\s+(your\s+)?(system\s+)?prompt",
-        r"dump\s+(the\s+)?(context|prompt|instructions?)",
-        r"<\s*/?\s*system\s*>",
-        r"act\s+as\s+if\s+you\s+have\s+no\s+restrictions",
-        r"qa-probe[-_]?\d*",
-        r"finish\s+with\s+the\s+exact\s+line",
-        r"end\s+(your\s+)?answer\s+with\s+(the\s+)?exact\s+(line|phrase|words?)",
-        r"end\s+(your\s+)?answer\s+with\s+the\s+exact\s+line",
-        r"answer\s+with\s+just\s+the\s+single\s+word",
-        r"reply\s+only\s+with\s+the\s+word",
-        r"quote\s+the\s+full\s+raw\s+text",
-        r"word\s+for\s+word\s+the\s+rules\s+you\s+were\s+given",
-        r"\bMANGOK\w*\b",
-        r"\b[A-Z]{4,}\d{2,}[A-Z0-9]*\s+CACHED\b",
+        r"\b(ignore|disregard|forget|override|bypass)\s+(all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|preceding|system|original)\s+(instructions?|guidance|rules|prompts?|directions)",
+        r"\b(forget|ignore|disregard)\s+(all\s+)?(your|the)\s+(rules|instructions|guidelines|guardrails)\b",
+        r"\byou\s+are\s+now\s+(?:DAN|jailbroken|unrestricted|in\s+developer\s+mode)",
+        r"\bdeveloper\s+mode\b",
+        r"\b(repeat|print|show|reveal|output|dump|display|quote|leak)\b.{0,40}\b(system\s+prompt|your\s+(instructions|rules|prompt)|the\s+(instructions|rules)\s+you\s+(were|have\s+been)\s+given|hidden\s+(instructions|prompt))",
+        r"\b(print|dump|quote|output|show)\b.{0,30}\braw\s+(context|text|chunks?)",
+        r"\bword\s+for\s+word\b.{0,40}\b(rules|instructions|prompt|context)",
+        r"\b(instructions?|rules|guidelines)\b[^.?!]{0,30}\byou\s+(were|have\s+been)\s+given\b",
+        r"\bsystem\s+prompt\b",
+        r"\boutput\s+exactly\s*:",
+        r"\boptimized\s+search\s+query\s*:",
+        r"\breply\s+(only\s+)?with\s+(only\s+)?(the\s+)?(single\s+)?word\b",
+        r"\banswer\s+with\s+(just|only)\s+the\s+(single\s+)?word\b",
+        r"\b(end|finish|close|terminate)\s+(your\s+)?(answer|reply|response)?\s*with\s+(the\s+)?exact\s+(line|phrase|words?|text)",
+        r"\bappend\s+(the\s+)?(exact\s+)?(line|phrase|marker|token)\b",
+        r"<\s*/?\s*(system|assistant|im_start|im_end)\s*\|?>",
+        r"<\|\s*(system|assistant|im_start|im_end)\s*\|>",
+        r"^\s*(system|assistant)\s*:",
+        r"\bact\s+as\s+(if\s+you\s+have\s+no|an?\s+unrestricted)",
+        r"\bpretend\s+(that\s+)?you\s+(have\s+no|are\s+not\s+bound)",
+        r"\bqa-probe[-_]?\w*",
     )
 ]
 
 _OUTPUT_LEAK_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(p, re.IGNORECASE)
+    re.compile(p, re.IGNORECASE | re.MULTILINE)
     for p in (
         r"CRITICAL RULES FOR FACTUAL ACCURACY",
         r"Formatting Rules for UI Compatibility",
@@ -91,47 +92,48 @@ def validate_message_length(text: str) -> None:
         )
 
 
-# Rare ALLCAPS+digit tokens callers use as cache-poison markers
-_MARKER_TOKEN_RE = re.compile(r"\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{6,}\b")
-_INSTRUCTION_ECHO_RE = re.compile(
-    r"(?i)\b(CACHED|BANANA|MANGOK\w*|QA-PROBE[-_]?\w*)\b"
+# Known poison tokens from past probes; never legitimate in an answer.
+_POISON_TOKEN_RE = re.compile(r"\b(BANANA|MANGOK\w*|QA-PROBE[-_]?\w*)\b", re.IGNORECASE)
+# Questions asking the model to emit a specific string in its answer
+_OUTPUT_CONTROL_RE = re.compile(
+    r"\b(end|finish|close)\s+(your\s+)?(answer|reply|response)?\s*with|\bappend\b|"
+    r"\binclude\s+the\s+(exact\s+)?(line|word|phrase)|\breply\s+(only\s+)?with|\bsay\s+only\b",
+    re.IGNORECASE,
 )
+_MARKER_TOKEN_RE = re.compile(r"\b(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{5,}\b")
 
 
 def extract_caller_markers(text: str) -> set[str]:
-    """Tokens in the user message that look like audit/poison markers."""
-    if not text:
+    """ALLCAPS+digit tokens the caller asked the model to emit."""
+    if not text or not _OUTPUT_CONTROL_RE.search(text):
         return set()
-    found = {m.group(0).upper() for m in _MARKER_TOKEN_RE.finditer(text)}
-    found |= {m.group(0).upper() for m in _INSTRUCTION_ECHO_RE.finditer(text)}
-    return found
+    return {m.group(0).upper() for m in _MARKER_TOKEN_RE.finditer(text)}
 
 
 def answer_echoes_markers(question: str, answer: str) -> bool:
-    """True if the answer repeats a caller-supplied marker (soft cache poison)."""
+    """True if the answer repeats a caller-requested marker or a poison token."""
     if not answer:
         return False
-    markers = extract_caller_markers(question)
-    if not markers:
-        # Still block known poison echoes even if the question lacked them
-        return bool(_INSTRUCTION_ECHO_RE.search(answer))
+    if _POISON_TOKEN_RE.search(answer):
+        return True
     upper = answer.upper()
-    return any(m in upper for m in markers)
+    return any(m in upper for m in extract_caller_markers(question or ""))
 
 
 def filter_output(answer: str, question: str | None = None) -> str | None:
-    """Return None if the answer looks like a prompt/context leak or marker echo."""
+    """Return None if the answer looks like a prompt/context leak or marker echo.
+
+    A "Sources:" block listing many Document/Page lines is normal; only the raw
+    context layout (Document / Page / Text) counts as a dump.
+    """
     if not answer:
         return None
     for p in _OUTPUT_LEAK_PATTERNS:
         if p.search(answer):
             return None
-    # Heuristic: many "Document:" / "Page:" lines → raw context dump
-    if answer.count("Document:") >= 3 and answer.count("Page:") >= 3:
+    if answer.count("Text:") >= 2 and answer.count("Document:") >= 2:
         return None
-    if question and answer_echoes_markers(question, answer):
-        return None
-    if _INSTRUCTION_ECHO_RE.search(answer):
+    if answer_echoes_markers(question or "", answer):
         return None
     return answer
 
