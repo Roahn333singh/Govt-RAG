@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 import uuid
@@ -312,6 +313,21 @@ def _busy_response(session_id: str) -> JSONResponse:
     )
 
 
+def _sse(payload: dict) -> str:
+    return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
+
+
+def _text_chunks(text: str, words_per_chunk: int = 6):
+    words = (text or "").split(" ")
+    total = len(words)
+    for i in range(0, total, words_per_chunk):
+        piece = " ".join(words[i : i + words_per_chunk])
+        if i + words_per_chunk < total:
+            piece += " "
+        if piece:
+            yield piece
+
+
 def _chat_response(
     answer: str,
     sources: list | None,
@@ -485,7 +501,8 @@ async def users_chat_stream(
     if is_injection(message):
 
         async def refusal_stream():
-            yield INJECTION_REFUSAL
+            yield _sse({"type": "token", "text": INJECTION_REFUSAL})
+            yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
 
         return StreamingResponse(refusal_stream(), media_type="text/event-stream")
 
@@ -495,9 +512,24 @@ async def users_chat_stream(
         )
         cached = await _lookup_cache(message, user_lang, query_vector)
         if cached:
+            raw = cached.get("answer") or ""
+            if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
+                answer, sources = INJECTION_REFUSAL, []
+            else:
+                answer = filter_output(raw, message) or REFUSAL_TEXT
+                sources = cited_sources(answer, cached.get("sources") or [])
 
             async def cached_stream():
-                yield cached.get("answer") or REFUSAL_TEXT
+                for piece in _text_chunks(answer):
+                    yield _sse({"type": "token", "text": piece})
+                yield _sse(
+                    {
+                        "type": "done",
+                        "sources": sources,
+                        "session_id": session_id,
+                        "cached": True,
+                    }
+                )
 
             return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
@@ -508,60 +540,78 @@ async def users_chat_stream(
             final_answer = ""
             sources: list = []
             try:
-                async for event in graph.astream_events(
-                    {
-                        "messages": [{"role": "user", "content": message}],
-                        "session_id": session_id,
-                        "answer_language": user_lang,
-                        "query_vector": query_vector,
-                        "sources": [],
-                    },
-                    config,
-                    version="v2",
-                ):
-                    kind = event.get("event")
-                    if kind == "on_chat_model_stream":
-                        # Only stream tokens from the generator LLM
-                        meta = event.get("metadata") or {}
-                        node = meta.get("langgraph_node")
-                        if node and node != "generator":
-                            continue
-                        chunk = event.get("data", {}).get("chunk")
-                        content = getattr(chunk, "content", None) if chunk else None
-                        if isinstance(content, list):
-                            content = "".join(
-                                part.get("text", "")
-                                for part in content
-                                if isinstance(part, dict)
-                            )
-                        if content:
-                            yield content
-                            final_answer += content
-                    elif kind == "on_chain_end":
-                        # Capture sources from retriever/generator end state
-                        name = event.get("name") or ""
-                        output = (event.get("data") or {}).get("output") or {}
-                        if isinstance(output, dict) and output.get("sources"):
-                            sources = output["sources"]
+                async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
+                    async with _llm_slots:
+                        async for event in graph.astream_events(
+                            {
+                                "messages": [{"role": "user", "content": message}],
+                                "session_id": session_id,
+                                "answer_language": user_lang,
+                                "query_vector": query_vector,
+                                "sources": [],
+                            },
+                            config,
+                            version="v2",
+                        ):
+                            kind = event.get("event")
+                            if kind == "on_chat_model_stream":
+                                meta = event.get("metadata") or {}
+                                node = meta.get("langgraph_node")
+                                if node and node != "generator":
+                                    continue
+                                chunk = event.get("data", {}).get("chunk")
+                                content = getattr(chunk, "content", None) if chunk else None
+                                if isinstance(content, list):
+                                    content = "".join(
+                                        part.get("text", "")
+                                        for part in content
+                                        if isinstance(part, dict)
+                                    )
+                                if content:
+                                    yield _sse({"type": "token", "text": content})
+                                    final_answer += content
+                            elif kind == "on_chain_end":
+                                output = (event.get("data") or {}).get("output") or {}
+                                if isinstance(output, dict) and output.get("sources"):
+                                    sources = output["sources"]
 
                 filtered = filter_output(final_answer, message)
                 if filtered is None:
-                    return
-                if _is_cacheable_answer(filtered, sources, message):
-                    await _write_cache(
-                        message, filtered, user_lang, query_vector, sources
-                    )
+                    final_answer = INJECTION_REFUSAL
+                    sources = []
+                    yield _sse({"type": "replace", "text": INJECTION_REFUSAL})
+                else:
+                    final_answer = filtered
+                    sources = cited_sources(final_answer, sources)
+                    if _is_cacheable_answer(final_answer, sources, message):
+                        await _write_cache(
+                            message, final_answer, user_lang, query_vector, sources
+                        )
+                yield _sse(
+                    {
+                        "type": "done",
+                        "sources": sources,
+                        "session_id": session_id,
+                        "cached": False,
+                    }
+                )
+            except TimeoutError:
+                print(f"/chat/stream timeout after {REQUEST_TIMEOUT_SECONDS}s")
+                yield _sse({"type": "token", "text": "The desk is busy. Please retry your question in a few seconds."})
+                yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
             except Exception as e:
-                print(f"Streaming error: {e}")
-                yield "\n\n[Error while generating answer. Please retry.]"
+                print(f"Streaming error: {type(e).__name__}: {e}")
+                yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
+                yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
 
         return StreamingResponse(
             generate_and_save_stream(), media_type="text/event-stream"
         )
     except Exception as e:
-        print(f"/chat/stream error: {e}")
+        print(f"/chat/stream error: {type(e).__name__}: {e}")
 
         async def err_stream():
-            yield "Unable to retrieve an answer right now. Please try again."
+            yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
+            yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
 
         return StreamingResponse(err_stream(), media_type="text/event-stream")

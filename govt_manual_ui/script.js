@@ -19,6 +19,7 @@ const API_BASE =
         ? window.location.origin
         : "http://127.0.0.1:8000";
 const CHAT_URL = `${API_BASE}/chat`;
+const STREAM_URL = `${API_BASE}/chat/stream`;
 const SESSION_URL = `${API_BASE}/ui/session`;
 console.info("[Manual AI] chat endpoint:", CHAT_URL);
 
@@ -301,6 +302,68 @@ function triggerQuickQuery(query) {
     sendMessage();
 }
 
+// ── Streaming answer ──────────────────────────────────────────────
+// Returns true once tokens have started, so a mid-stream failure is not
+// sent a second time through /chat.
+async function streamAnswer(question, shimmer) {
+    let res;
+    try {
+        res = await authedFetch(STREAM_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: question, question, session_id: sessionId }),
+        });
+    } catch (err) {
+        return false;
+    }
+    if (!res.ok || !res.body) return false;
+
+    removeShimmer(shimmer);
+    const live = createMessageElement("bot", "", [], true);
+    thread.appendChild(live);
+    const body = live.querySelector(".memo-card__body");
+    const memo = live.querySelector(".memo-card");
+    let text = "";
+    let sources = [];
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+
+    const applyEvent = (ev) => {
+        if (ev.type === "token") text += ev.text || "";
+        else if (ev.type === "replace") text = ev.text || "";
+        else if (ev.type === "done") {
+            sources = ev.sources || [];
+            if (ev.session_id) sessionId = ev.session_id;
+            return;
+        } else return;
+        body.innerHTML = formatBotResponse(text);
+        scrollToBottom();
+    };
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let split;
+        while ((split = buf.indexOf("\n\n")) >= 0) {
+            const block = buf.slice(0, split);
+            buf = buf.slice(split + 2);
+            const line = block.split("\n").find((l) => l.startsWith("data:"));
+            if (!line) continue;
+            try {
+                applyEvent(JSON.parse(line.slice(5).trim()));
+            } catch (err) {
+                console.warn("Bad stream event", err);
+            }
+        }
+    }
+    attachSources(memo, sources);
+    chatMessages.push({ role: "bot", text, sources });
+    saveSession();
+    return true;
+}
+
 // ── Sending message ───────────────────────────────────────────────
 async function sendMessage() {
     const question = input.value.trim();
@@ -324,6 +387,9 @@ async function sendMessage() {
 
     try {
         if (!sessionId) sessionId = crypto.randomUUID();
+
+        const streamed = await streamAnswer(question, shimmer);
+        if (streamed) return;
 
         const res = await authedFetch(CHAT_URL, {
             method: "POST",
@@ -376,6 +442,36 @@ async function sendMessage() {
 }
 
 // ── Render message ─────────────────────────────────────────────
+function attachSources(memo, sources) {
+    if (!memo || !sources || sources.length === 0) return;
+    const sourcesDiv = document.createElement("div");
+    sourcesDiv.classList.add("memo-card__sources");
+
+    const title = document.createElement("span");
+    title.classList.add("sources-title");
+    title.textContent = t("verified_refs");
+    sourcesDiv.appendChild(title);
+
+    const list = document.createElement("div");
+    list.classList.add("sources-list");
+    sources.forEach((source, index) => {
+        const label = buildSourceLabel(source) || `Ref [${index + 1}]`;
+        const badge = document.createElement("button");
+        badge.classList.add("source-badge");
+        badge.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            ${label}
+        `;
+        badge.addEventListener("click", (e) => {
+            e.stopPropagation();
+            inspectSource(source);
+        });
+        list.appendChild(badge);
+    });
+    sourcesDiv.appendChild(list);
+    memo.appendChild(sourcesDiv);
+}
+
 function appendMessage(role, text, sources = [], isNew = false) {
     const el = createMessageElement(role, text, sources, isNew);
     thread.appendChild(el);
@@ -425,37 +521,7 @@ function createMessageElement(role, text, sources = [], isNew = false) {
         body.innerHTML = formatBotResponse(text);
         memo.appendChild(body);
 
-        // Add Sources References
-        if (sources && sources.length > 0) {
-            const sourcesDiv = document.createElement("div");
-            sourcesDiv.classList.add("memo-card__sources");
-            
-            const title = document.createElement("span");
-            title.classList.add("sources-title");
-            title.textContent = t("verified_refs");
-            sourcesDiv.appendChild(title);
-
-            const list = document.createElement("div");
-            list.classList.add("sources-list");
-
-            sources.forEach((source, index) => {
-                const label = buildSourceLabel(source) || `Ref [${index + 1}]`;
-                const badge = document.createElement("button");
-                badge.classList.add("source-badge");
-                badge.innerHTML = `
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    ${label}
-                `;
-                badge.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    inspectSource(source);
-                });
-                list.appendChild(badge);
-            });
-
-            sourcesDiv.appendChild(list);
-            memo.appendChild(sourcesDiv);
-        }
+        attachSources(memo, sources);
 
         // Action Bar (Copy Text)
         const actions = document.createElement("div");
