@@ -7,7 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080 \
     PATH="/app/.venv/bin:$PATH" \
     FASTEMBED_CACHE_PATH=/app/models \
-    HF_HOME=/app/models/hf
+    HF_HOME=/app/models/hf \
+    OMP_NUM_THREADS=2 \
+    ONNXRUNTIME_INTRA_OP_NUM_THREADS=2
 
 WORKDIR /app
 

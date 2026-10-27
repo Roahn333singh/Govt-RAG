@@ -89,9 +89,21 @@ def get_compile_all():
     return compile_all
 
 
+def _configure_thread_pool() -> None:
+    # Default pool is min(32, cpus + 4) = 6 on Cloud Run's 2 vCPU, which would
+    # serialise concurrent embedding / Qdrant calls behind each other.
+    from concurrent.futures import ThreadPoolExecutor
+
+    workers = int(os.getenv("IO_THREADS", "32"))
+    asyncio.get_running_loop().set_default_executor(
+        ThreadPoolExecutor(max_workers=workers, thread_name_prefix="io")
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    search.init_services()
+    _configure_thread_pool()
+    await asyncio.to_thread(search.init_services)
     # Warm-compile the LangGraph once
     get_compile_all()()
     yield
@@ -227,19 +239,19 @@ def _cache_entry_fresh(payload: dict) -> bool:
         return False
 
 
+def _query_cache_sync(query_vector: list, user_lang: str):
+    return search.qdrant_client.query_points(
+        collection_name=search.CACHE_COLLECTION_NAME,
+        query=query_vector,
+        limit=1,
+        query_filter=Filter(
+            must=[FieldCondition(key="language", match=MatchValue(value=user_lang))]
+        ),
+    ).points
+
+
 async def _lookup_cache(message: str, user_lang: str, query_vector: list):
-    cache_results = await asyncio.to_thread(
-        lambda: search.qdrant_client.query_points(
-            collection_name=search.CACHE_COLLECTION_NAME,
-            query=query_vector,
-            limit=1,
-            query_filter=Filter(
-                must=[
-                    FieldCondition(key="language", match=MatchValue(value=user_lang))
-                ]
-            ),
-        ).points
-    )
+    cache_results = await asyncio.to_thread(_query_cache_sync, query_vector, user_lang)
     if not cache_results:
         return None
     hit = cache_results[0]
