@@ -68,13 +68,37 @@ _OUTPUT_LEAK_PATTERNS: list[re.Pattern[str]] = [
 
 _TOKEN_RE = re.compile(r"[\w\u0900-\u097F]+", re.UNICODE)
 _DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+_LATIN_RE = re.compile(r"[A-Za-z]")
+# Roman-Hindi function words. Technical Hinglish ("tender accept kar sakta hai")
+# stays English unless these dominate the question.
+_HI_FUNCTION_WORDS = {
+    "kya", "kyu", "kyun", "kyunki", "kaise", "kahan", "kab", "kaun", "kaunsa",
+    "hai", "hain", "hoga", "nahi", "nahin", "ka", "ki", "ke", "ko", "se", "mein",
+    "me", "par", "aur", "ya", "koi", "kisi", "iska", "iski", "iske", "yeh", "ye",
+    "woh", "wo", "kar", "karna", "karta", "karti", "karte", "sakta", "sakti",
+    "sakte", "chahiye", "liye", "wala", "wali", "wale", "kitna", "kitni", "kitne",
+    "bhi", "toh", "tha", "thi", "raha", "rahi", "rahe",
+}
 
 
 def detect_answer_language(text: str) -> str:
-    """Devanagari in the question → Hindi; otherwise English."""
+    """Hindi when the question is mostly Devanagari, or roman Hindi function words dominate.
+
+    Latin-script questions, including technical Hinglish, are answered in English.
+    """
     if not text:
         return "en"
-    return "hi" if _DEVANAGARI_RE.search(text) else "en"
+    dev = len(_DEVANAGARI_RE.findall(text))
+    lat = len(_LATIN_RE.findall(text))
+    if dev >= 3 and dev > lat:
+        return "hi"
+    words = _LATIN_RE and re.findall(r"[A-Za-z]+", text.lower())
+    if not words:
+        return "hi" if dev else "en"
+    hits = sum(1 for w in words if w in _HI_FUNCTION_WORDS)
+    if hits >= 4 and hits / len(words) > 0.6:
+        return "hi"
+    return "en"
 
 
 def is_injection(text: str) -> bool:

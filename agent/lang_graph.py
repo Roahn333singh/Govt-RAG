@@ -203,12 +203,8 @@ async def generator_node(state: RagState):
         }
 
     lang = state.get("answer_language") or "en"
-    lang_instruction = (
-        "Answer in clear, formal Hindi (Devanagari). Translate technical terms "
-        "accurately (District Magistrate = जिलाधिकारी, Executive Engineer = अधिशासी अभियंता)."
-        if lang == "hi"
-        else "Answer in clear, formal English."
-    )
+    language_name = "Hindi" if lang == "hi" else "English"
+    lang_instruction = f"Answer in {language_name}. Quote Hindi terms only in brackets."
     user_query = state["messages"][-1].content
 
     prompt = f"""You are a highly precise, factually strict AI assistant for UP Government Data.
