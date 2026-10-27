@@ -57,6 +57,17 @@ CORS_ORIGINS: "http://127.0.0.1:8000,http://localhost:8000,${SERVICE_URL_HINT}"
 EOF
 trap 'rm -f "${ENV_FILE}"' EXIT
 
+# Required secrets must exist; optional ones are wired only if present so a
+# missing Redis URL degrades to per-instance limits instead of a failed deploy.
+SECRETS="OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,CLUSTER_ENDPOINT=CLUSTER_ENDPOINT:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest"
+for s in RATE_LIMIT_STORAGE_URI; do
+  if gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+    SECRETS="${SECRETS},${s}=${s}:latest"
+  else
+    echo "WARN: secret ${s} not found — skipping"
+  fi
+done
+
 echo "==> Deploy Cloud Run service: ${SERVICE} (no traffic yet)"
 # Secrets must already exist in Secret Manager — never bake .env into the image.
 # 8Gi + concurrency 4: retest still saw miss-path 503s at 4 concurrent under 4Gi/8.
@@ -75,7 +86,7 @@ gcloud run deploy "${SERVICE}" \
   --min-instances "${MIN_INSTANCES:-1}" \
   --startup-probe="httpGet.path=/ready,initialDelaySeconds=10,timeoutSeconds=10,periodSeconds=10,failureThreshold=18" \
   --env-vars-file "${ENV_FILE}" \
-  --update-secrets "OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,CLUSTER_ENDPOINT=CLUSTER_ENDPOINT:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest" \
+  --update-secrets "${SECRETS}" \
   --no-traffic \
   --tag=candidate \
   --project="${PROJECT_ID}"

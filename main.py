@@ -64,7 +64,18 @@ _REFUSAL_MARKERS = (
 CHAT_RATE_MINUTE = os.getenv("CHAT_RATE_MINUTE", "15/minute")
 CHAT_RATE_DAY = os.getenv("CHAT_RATE_DAY", "100/day")
 
-limiter = Limiter(key_func=real_client_ip)
+_RATE_LIMIT_STORAGE = os.getenv("RATE_LIMIT_STORAGE_URI") or "memory://"
+if _RATE_LIMIT_STORAGE == "memory://":
+    print("⚠️  RATE_LIMIT_STORAGE_URI not set — rate limits are per-instance only")
+
+# swallow_errors + in-memory fallback: a Redis outage degrades to
+# per-instance limits instead of failing every request.
+limiter = Limiter(
+    key_func=real_client_ip,
+    storage_uri=_RATE_LIMIT_STORAGE,
+    swallow_errors=True,
+    in_memory_fallback_enabled=_RATE_LIMIT_STORAGE != "memory://",
+)
 
 
 def get_compile_all():
