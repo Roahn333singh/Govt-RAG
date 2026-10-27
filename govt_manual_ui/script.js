@@ -19,7 +19,34 @@ const API_BASE =
         ? window.location.origin
         : "http://127.0.0.1:8000";
 const CHAT_URL = `${API_BASE}/chat`;
+const SESSION_URL = `${API_BASE}/ui/session`;
 console.info("[Manual AI] chat endpoint:", CHAT_URL);
+
+// ── Auth: short-lived token issued to this page by /ui/session ──
+let authToken = null;
+let authTokenExpiry = 0;
+
+async function getAuthToken(force = false) {
+    if (!force && authToken && Date.now() < authTokenExpiry) return authToken;
+    const res = await fetch(SESSION_URL, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(`Could not start a session (status ${res.status})`);
+    const data = await res.json();
+    authToken = data.token;
+    // Refresh a minute early
+    authTokenExpiry = Date.now() + Math.max(0, (data.expires_in - 60)) * 1000;
+    return authToken;
+}
+
+async function authedFetch(url, options = {}) {
+    const send = async (token) =>
+        fetch(url, {
+            ...options,
+            headers: { ...(options.headers || {}), "X-Session-Token": token },
+        });
+    let res = await send(await getAuthToken());
+    if (res.status === 401) res = await send(await getAuthToken(true));
+    return res;
+}
 
 // ── State ──────────────────────────────────────────────────────
 let sessionId = null;
@@ -298,7 +325,7 @@ async function sendMessage() {
     try {
         if (!sessionId) sessionId = crypto.randomUUID();
 
-        const res = await fetch(CHAT_URL, {
+        const res = await authedFetch(CHAT_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

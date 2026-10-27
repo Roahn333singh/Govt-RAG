@@ -38,7 +38,12 @@ from agent.guards import (
     is_injection,
     validate_message_length,
 )
-from agent.security import real_client_ip
+from agent.security import (
+    SESSION_TOKEN_TTL_SECONDS,
+    issue_session_token,
+    real_client_ip,
+    require_client,
+)
 from vectorDB import search
 
 # Cache policy
@@ -98,10 +103,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _ALLOWED_ORIGINS = [
     o.strip()
-    for o in os.getenv(
-        "CORS_ORIGINS",
-        "http://127.0.0.1:8000,http://localhost:8000,"
-        "https://manual-ai-rag-nszha5soya-ey.a.run.app",
+    for o in (
+        os.getenv("ALLOWED_ORIGINS")
+        or os.getenv("CORS_ORIGINS")
+        or "https://manual-ai-rag-nszha5soya-ey.a.run.app"
     ).split(",")
     if o.strip()
 ]
@@ -110,8 +115,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Session-Token"],
 )
 
 
@@ -312,6 +317,18 @@ async def ready_chk():
     return {"status": "ready"}
 
 
+@app.get("/ui/session", include_in_schema=False)
+@limiter.limit("20/minute")
+async def ui_session(request: Request):
+    """Short-lived chat token for the same-origin web UI."""
+    if request.headers.get("sec-fetch-site") != "same-origin":
+        raise HTTPException(status_code=403, detail="Session tokens are only issued to the web UI.")
+    return {
+        "token": issue_session_token(real_client_ip(request)),
+        "expires_in": SESSION_TOKEN_TTL_SECONDS,
+    }
+
+
 _UI_DIR = os.path.join(os.path.dirname(__file__), "govt_manual_ui")
 if os.path.isdir(_UI_DIR):
     app.mount("/ui", StaticFiles(directory=_UI_DIR, html=True), name="ui")
@@ -323,6 +340,7 @@ if os.path.isdir(_UI_DIR):
 async def users_chat(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],
+    _auth: Annotated[None, Depends(require_client)],
     message: str | None = None,
     session_id: str | None = None,
     chat_data: ChatRequest | None = Body(default=None),
@@ -416,6 +434,7 @@ async def users_chat(
 async def users_chat_stream(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],
+    _auth: Annotated[None, Depends(require_client)],
     message: str | None = None,
     session_id: str | None = None,
     chat_data: ChatRequest | None = Body(default=None),

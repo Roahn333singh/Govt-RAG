@@ -53,13 +53,26 @@ cat > "${ENV_FILE}" <<EOF
 OPENROUTER_LLM_MODEL: "google/gemini-2.5-flash"
 OPENROUTER_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
-CORS_ORIGINS: "http://127.0.0.1:8000,http://localhost:8000,${SERVICE_URL_HINT}"
+ALLOWED_ORIGINS: "${SERVICE_URL_HINT}"
 EOF
 trap 'rm -f "${ENV_FILE}"' EXIT
+
+# App-generated secrets: create a random value on first deploy.
+for s in APP_API_KEY SESSION_SIGNING_KEY ADMIN_TOKEN; do
+  if ! gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+    echo "==> Creating secret ${s}"
+    python3 -c 'import secrets; print(secrets.token_urlsafe(32), end="")' \
+      | gcloud secrets create "${s}" --data-file=- --replication-policy=automatic --project="${PROJECT_ID}"
+    gcloud secrets add-iam-policy-binding "${s}" \
+      --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+      --role="roles/secretmanager.secretAccessor" --project="${PROJECT_ID}" >/dev/null
+  fi
+done
 
 # Required secrets must exist; optional ones are wired only if present so a
 # missing Redis URL degrades to per-instance limits instead of a failed deploy.
 SECRETS="OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,CLUSTER_ENDPOINT=CLUSTER_ENDPOINT:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest"
+SECRETS="${SECRETS},APP_API_KEY=APP_API_KEY:latest,SESSION_SIGNING_KEY=SESSION_SIGNING_KEY:latest,ADMIN_TOKEN=ADMIN_TOKEN:latest"
 for s in RATE_LIMIT_STORAGE_URI; do
   if gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
     SECRETS="${SECRETS},${s}=${s}:latest"
@@ -115,6 +128,8 @@ echo "==> Candidate URL: ${CANDIDATE_URL}"
 
 if [[ "${SKIP_EVAL:-0}" != "1" ]]; then
   echo "==> Running injection eval gate against candidate"
+  APP_API_KEY="$(gcloud secrets versions access latest --secret=APP_API_KEY --project="${PROJECT_ID}")"
+  export APP_API_KEY
   if .venv/bin/python scripts/run_eval.py --base "${CANDIDATE_URL}" --skip-gold; then
     echo "==> Eval passed — shifting 100% traffic to new revision"
     gcloud run services update-traffic "${SERVICE}" \

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -71,12 +72,10 @@ def parse_gold(path: Path, limit: int | None = None) -> list[dict]:
 def post_chat(base: str, message: str, timeout: float = 120.0) -> dict:
     url = base.rstrip("/") + "/chat"
     body = json.dumps({"message": message, "session_id": f"eval-{time.time()}"}).encode()
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    headers = {"Content-Type": "application/json"}
+    if os.getenv("APP_API_KEY"):
+        headers["X-API-Key"] = os.environ["APP_API_KEY"]
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode()
     data = json.loads(raw)

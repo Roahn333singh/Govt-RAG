@@ -192,17 +192,28 @@ uv run streamlit run frontend.py
 | `POST` | `/chat` | Send a question, get a complete answer |
 | `POST` | `/chat/stream` | Send a question, get a streaming (SSE) answer |
 
+### Authentication
+
+`/chat` and `/chat/stream` need one of two credentials:
+
+- **Scripts and integrations** send `X-API-Key: <APP_API_KEY>`. The key lives in Secret Manager (`APP_API_KEY`); read it with `gcloud secrets versions access latest --secret=APP_API_KEY`.
+- **The web UI** at `/ui/` calls `GET /ui/session` (same-origin only, checked via `Sec-Fetch-Site`) and gets a 30-minute HMAC token bound to the caller's IP. It sends that token as `X-Session-Token`. A determined script can still mimic the browser, so the per-IP rate limit (15/minute, 100/day, shared through Redis) remains the real cost ceiling; the token stops casual anonymous use of the API.
+
+CORS only allows origins listed in `ALLOWED_ORIGINS` (default: the Cloud Run URL).
+
 ### Example Request
 
 ```bash
 # Simple chat
 curl -X POST "http://localhost:8000/chat" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $APP_API_KEY" \
   -d '{"message": "What is the Pragati Portal?"}'
 
-# Streaming chat
-curl -X POST "http://localhost:8000/chat/stream" \
+# Streaming chat (Server-Sent Events)
+curl -N -X POST "http://localhost:8000/chat/stream" \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $APP_API_KEY" \
   -d '{"message": "ISO के उद्देश्य क्या हैं?"}'
 ```
 
