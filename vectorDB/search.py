@@ -25,7 +25,10 @@ CACHE_COLLECTION_NAME = "semantic-query-cache"
 
 # Rerank / retrieve pool sizes — balanced for recall vs Cloud Run memory
 PREFETCH_LIMIT = 40
-RRF_CANDIDATES = 28
+RRF_CANDIDATES = int(os.getenv("RRF_CANDIDATES", "28"))
+# Cross-encoder cost grows with input length; chunks rarely need more than this to rank
+RERANK_MAX_CHARS = int(os.getenv("RERANK_MAX_CHARS", "1200"))
+DEFAULT_RERANKER = "jinaai/jina-reranker-v2-base-multilingual"
 
 # Init Client and Embedder
 qdrant_client = QdrantClient(
@@ -73,10 +76,7 @@ def init_services():
     if sparse_embedder is None:
         sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
     if reranker is None:
-        # Keep MiniLM for memory; multilingual eval can swap later via env
-        model = os.getenv(
-            "RERANKER_MODEL", "Xenova/ms-marco-MiniLM-L-6-v2"
-        )
+        model = os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER
         reranker = TextCrossEncoder(model_name=model)
     _services_ready = True
     print("Services ready!")
@@ -130,7 +130,7 @@ def run_hybrid_search(
         return []
 
     try:
-        doc_texts = [r.payload["text"] for r in candidates]
+        doc_texts = [(r.payload.get("text") or "")[:RERANK_MAX_CHARS] for r in candidates]
         scores = list(reranker.rerank(question, doc_texts))
         scored_pairs = sorted(
             zip(scores, candidates), key=lambda x: x[0], reverse=True

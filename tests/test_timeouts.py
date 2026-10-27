@@ -38,3 +38,4 @@ async def test_rewriter_falls_back_to_raw_question(monkeypatch):
         {"messages": [HumanMessage(content="What is the IGRS file size limit?")]}
     )
     assert out["search_query"] == "What is the IGRS file size limit?"
+    assert out["search_queries"] == []

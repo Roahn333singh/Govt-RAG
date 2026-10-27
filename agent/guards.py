@@ -150,6 +150,36 @@ def lexical_overlap(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
+def parse_bilingual_rewrite(raw: str, fallback: str) -> list[str]:
+    """Pull the EN and HI lines the rewriter was asked to emit.
+
+    Returns extra search strings only; the raw question is always searched too.
+    """
+    if not raw:
+        return []
+    found: dict[str, str] = {}
+    tagged = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        upper = stripped.upper()
+        for tag in ("EN", "HI"):
+            if upper.startswith(tag + ":") or upper.startswith(tag + "："):
+                tagged = True
+                found[tag] = sanitize_rewrite(stripped.split(":", 1)[1], "", max_words=24)
+    queries = []
+    for tag in ("EN", "HI"):
+        q = found.get(tag) or ""
+        if q and q.lower() != (fallback or "").lower() and q.lower() not in {x.lower() for x in queries}:
+            queries.append(q)
+    if tagged or not queries:
+        if tagged:
+            return queries
+        one = sanitize_rewrite(raw, "")
+        if one and one.lower() != (fallback or "").lower():
+            queries.append(one)
+    return queries
+
+
 def sanitize_rewrite(raw: str, fallback: str, max_words: int = 30) -> str:
     """Keep first line, strip spoofed prefixes, cap length."""
     if not raw:
