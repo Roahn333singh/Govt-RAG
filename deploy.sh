@@ -54,6 +54,7 @@ OPENROUTER_LLM_MODEL: "google/gemini-2.5-flash"
 OPENROUTER_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
 RERANKER_MODEL: "jinaai/jina-reranker-v2-base-multilingual"
+DOC_VERSION: "2026-10-27"
 ALLOWED_ORIGINS: "${SERVICE_URL_HINT}"
 EOF
 trap 'rm -f "${ENV_FILE}"' EXIT

@@ -21,6 +21,8 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+sys.path.insert(0, os.path.dirname(__file__))
+from krutidev_to_unicode import looks_like_krutidev
 from qdrant_client import QdrantClient
 
 COLLECTION = "my-collection"
@@ -44,6 +46,8 @@ def de_ratio(text: str) -> float:
 def looks_garbled(text: str, doc_id: str) -> bool:
     if not text or len(text) < 40:
         return False
+    if looks_like_krutidev(text):
+        return True
     # Hindi-named docs with almost no Devanagari are suspicious
     hindi_name = bool(DEVANAGARI.search(doc_id or ""))
     ratio = de_ratio(text)
