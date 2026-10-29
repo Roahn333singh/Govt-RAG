@@ -79,6 +79,7 @@ def install_request_logging(app) -> None:
                 "qdrant_ms": timings.get("qdrant_ms", 0),
                 "rerank_ms": timings.get("rerank_ms", 0),
                 "generate_ms": timings.get("generate_ms", 0),
+                "key_id": getattr(request.state, "key_id", None),
             }
             span_ctx = trace.get_current_span().get_span_context()
             if span_ctx is not None and span_ctx.trace_id:

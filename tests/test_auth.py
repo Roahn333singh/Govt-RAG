@@ -1,3 +1,4 @@
+import json
 import time
 
 from agent.security import issue_session_token, verify_session_token
@@ -14,6 +15,22 @@ def test_chat_without_key_is_401(client):
 
 def test_chat_with_wrong_key_is_401(client):
     assert client.post("/chat", json=Q, headers={"X-API-Key": "nope"}).status_code == 401
+
+
+def test_qa_key_is_accepted_and_not_logged(client, monkeypatch, capsys):
+    monkeypatch.setenv("QA_API_KEY", "qa-key-value")
+    r = client.post("/chat", json=Q, headers={"X-API-Key": "qa-key-value"})
+    assert r.status_code == 200
+    lines = [line for line in capsys.readouterr().out.splitlines() if '"request_done"' in line]
+    payload = json.loads(lines[-1])
+    assert payload["key_id"] == "qa"
+    assert "qa-key-value" not in lines[-1]
+
+
+def test_labeled_extra_key_is_accepted(client, monkeypatch):
+    monkeypatch.setenv("API_KEYS", "partner:partner-key-value")
+    r = client.post("/chat", json=Q, headers={"X-API-Key": "partner-key-value"})
+    assert r.status_code == 200
 
 
 def test_chat_with_key_is_200(client):

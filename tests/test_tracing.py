@@ -20,6 +20,8 @@ def test_request_log_records_length_not_text(client, capsys):
     assert payload["path"] == "/chat"
     assert "duration_ms" in payload
     assert payload["instance_id"]
+    assert payload["key_id"] == "main"
+    assert "test-api-key" not in lines[-1]
     assert "SECRET-QUESTION-TEXT" not in lines[-1]
     assert "authorization" not in lines[-1].lower()
     assert "api-key" not in lines[-1].lower()

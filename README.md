@@ -210,7 +210,8 @@ Nothing secret is baked into the image. `deploy.sh` reads these from Secret Mana
 | `OPENROUTER_API_KEY` | Chat model and embeddings |
 | `CLUSTER_ENDPOINT` | Qdrant URL |
 | `QDRANT_API_KEY` | Qdrant key |
-| `APP_API_KEY` | `X-API-Key` for scripts. Created on first deploy if missing |
+| `APP_API_KEY` | `X-API-Key` for scripts. Logged as `key_id=main`. Created on first deploy if missing |
+| `rag-qa-api-key` | Second `X-API-Key`, mounted as `QA_API_KEY` and logged as `key_id=qa` |
 | `SESSION_SIGNING_KEY` | HMAC key for UI session tokens |
 | `ADMIN_TOKEN` | `X-Admin-Token` for `POST /admin/cache/purge` |
 | `RATE_LIMIT_STORAGE_URI` | Upstash `rediss://` URL. Optional; without it, limits are per instance |

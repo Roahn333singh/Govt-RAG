@@ -79,6 +79,15 @@ done
 # missing Redis URL degrades to per-instance limits instead of a failed deploy.
 SECRETS="OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,CLUSTER_ENDPOINT=CLUSTER_ENDPOINT:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest"
 SECRETS="${SECRETS},APP_API_KEY=APP_API_KEY:latest,SESSION_SIGNING_KEY=SESSION_SIGNING_KEY:latest,ADMIN_TOKEN=ADMIN_TOKEN:latest"
+# QA tester key. The env var is QA_API_KEY; the secret name is rag-qa-api-key.
+if gcloud secrets describe rag-qa-api-key --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  gcloud secrets add-iam-policy-binding rag-qa-api-key \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor" --project="${PROJECT_ID}" >/dev/null
+  SECRETS="${SECRETS},QA_API_KEY=rag-qa-api-key:latest"
+else
+  echo "WARN: secret rag-qa-api-key not found — QA key not mounted"
+fi
 for s in RATE_LIMIT_STORAGE_URI; do
   if gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
     SECRETS="${SECRETS},${s}=${s}:latest"

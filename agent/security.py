@@ -58,19 +58,49 @@ def verify_session_token(token: str, client_ip: str, now: float | None = None) -
     return hmac.compare_digest(sig, _sign(f"{exp}|{client_ip}"))
 
 
-def _api_key_ok(provided: str | None) -> bool:
-    expected = os.getenv("APP_API_KEY") or ""
-    if not expected or not provided:
-        return False
-    return secrets.compare_digest(provided.encode(), expected.encode())
+def _configured_api_keys() -> list[tuple[str, str]]:
+    """(label, secret) pairs. Labels are safe to log; the secrets are not."""
+    keys: list[tuple[str, str]] = []
+    main = os.getenv("APP_API_KEY") or ""
+    if main:
+        keys.append(("main", main))
+    qa = os.getenv("QA_API_KEY") or ""
+    if qa:
+        keys.append(("qa", qa))
+    for part in (os.getenv("API_KEYS") or "").split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        label, value = part.split(":", 1)
+        label, value = label.strip(), value.strip()
+        if label and value:
+            keys.append((label, value))
+    return keys
+
+
+def api_key_label(provided: str | None) -> str | None:
+    """Return the label of the matching key, or None. Uses hmac.compare_digest."""
+    if not provided:
+        return None
+    provided_b = provided.encode()
+    for label, expected in _configured_api_keys():
+        expected_b = expected.encode()
+        if len(provided_b) != len(expected_b):
+            continue
+        if hmac.compare_digest(provided_b, expected_b):
+            return label
+    return None
 
 
 async def require_client(request: Request) -> None:
     """Accept X-API-Key (scripts) or a UI-issued X-Session-Token."""
-    if _api_key_ok(request.headers.get("x-api-key")):
+    label = api_key_label(request.headers.get("x-api-key"))
+    if label:
+        request.state.key_id = label
         return
     token = request.headers.get("x-session-token")
     if token and verify_session_token(token, real_client_ip(request)):
+        request.state.key_id = "session"
         return
     raise HTTPException(
         status_code=401,
