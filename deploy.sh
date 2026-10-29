@@ -19,6 +19,7 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
   secretmanager.googleapis.com \
+  cloudtrace.googleapis.com \
   --project="${PROJECT_ID}"
 
 REPO="cloud-run-source-deploy"
@@ -56,6 +57,8 @@ OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
 RERANKER_MODEL: "jinaai/jina-reranker-v2-base-multilingual"
 DOC_VERSION: "2026-10-27"
 GIT_SHA: "$(git rev-parse --short HEAD)"
+OTEL_ENABLED: "true"
+OTEL_SAMPLE_RATE: "1.0"
 ALLOWED_ORIGINS: "${SERVICE_URL_HINT}"
 EOF
 trap 'rm -f "${ENV_FILE}"' EXIT
@@ -83,6 +86,13 @@ for s in RATE_LIMIT_STORAGE_URI; do
     echo "WARN: secret ${s} not found — skipping"
   fi
 done
+
+echo "==> Ensure the runtime service account can write Cloud Trace"
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+  --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --role="roles/cloudtrace.agent" \
+  --condition=None \
+  >/dev/null
 
 echo "==> Deploy Cloud Run service: ${SERVICE} (no traffic yet)"
 # Secrets must already exist in Secret Manager — never bake .env into the image.
