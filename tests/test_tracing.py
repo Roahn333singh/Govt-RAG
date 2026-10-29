@@ -25,6 +25,15 @@ def test_request_log_records_length_not_text(client, capsys):
     assert "api-key" not in lines[-1].lower()
 
 
+def test_parallel_step_timing_keeps_the_slowest():
+    from app.request_context import begin_request_fields, end_request_fields, note_timing
+
+    token = begin_request_fields()
+    note_timing("rerank_ms", 100)
+    note_timing("rerank_ms", 40)
+    assert end_request_fields(token)["timings"]["rerank_ms"] == 100
+
+
 def test_telemetry_stays_off_unless_enabled():
     from fastapi import FastAPI
 

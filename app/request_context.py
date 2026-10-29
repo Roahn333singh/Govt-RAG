@@ -40,4 +40,6 @@ def note_timing(name: str, elapsed_ms: float) -> None:
     if fields is None:
         return
     timings = fields["timings"]
-    timings[name] = round(float(timings.get(name, 0.0)) + elapsed_ms, 2)
+    # Parallel searches report the same step at once. Keep the slowest one,
+    # which is the wall-clock contribution, rather than adding them together.
+    timings[name] = round(max(float(timings.get(name, 0.0)), elapsed_ms), 2)
