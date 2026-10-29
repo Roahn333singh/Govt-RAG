@@ -29,6 +29,12 @@ dependencies = [
     "redis>=8.1.0",
     "cachetools>=7.2.6",
     "httpx>=0.28.1",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "opentelemetry-instrumentation-httpx>=0.66b1",
+    "opentelemetry-exporter-gcp-trace>=1.15.0",
+    "opentelemetry-propagator-gcp>=1.15.0",
+    "opentelemetry-resourcedetector-gcp>=1.14.0",
 ]
 
 [dependency-groups]
