@@ -29,6 +29,7 @@ RUN mkdir -p /app/models && .venv/bin/python /tmp/bake_models.py && rm /tmp/bake
 
 # App code
 COPY agent ./agent
+COPY app ./app
 COPY vectorDB ./vectorDB
 COPY govt_manual_ui ./govt_manual_ui
 COPY scripts ./scripts

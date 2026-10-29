@@ -50,6 +50,7 @@ from agent.cache_policy import (
     is_premise_correction,
     questions_match,
 )
+from app.telemetry import setup_telemetry
 from agent.security import (
     SESSION_TOKEN_TTL_SECONDS,
     admin_token_ok,
@@ -150,6 +151,7 @@ app = FastAPI(
     redoc_url="/redoc" if _DOCS_ENABLED else None,
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
+setup_telemetry(app)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
