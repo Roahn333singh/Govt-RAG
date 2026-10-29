@@ -54,6 +54,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from app.request_context import note_cache, note_question_length, note_timing
+from app.request_log import install_request_logging
 from app.telemetry import run_traced_in_threadpool, setup_telemetry
 from agent.security import (
     SESSION_TOKEN_TTL_SECONDS,
@@ -156,6 +157,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 setup_telemetry(app)
+install_request_logging(app)
 _tracer = trace.get_tracer(__name__)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
