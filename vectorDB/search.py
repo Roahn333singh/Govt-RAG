@@ -1,6 +1,9 @@
 import os
+import time
 
 from dotenv import load_dotenv
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -12,7 +15,11 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from app.request_context import note_timing
+
 load_dotenv(override=True)
+
+_tracer = trace.get_tracer(__name__)
 
 # Config
 QDRANT_URL = os.getenv(
@@ -102,48 +109,85 @@ def run_hybrid_search(
     """
     print(f"\nQuerying: '{question[:80]}'...")
 
-    dense_query_vector = dense_vector if dense_vector is not None else dense_embedder.embed_query(question)
+    if dense_vector is not None:
+        dense_query_vector = dense_vector
+    else:
+        started = time.perf_counter()
+        with _tracer.start_as_current_span("embed.query") as span:
+            span.set_attribute(
+                "model",
+                os.getenv("OPENROUTER_EMBEDDING_MODEL", "qwen/qwen3-embedding-8b"),
+            )
+            span.set_attribute(
+                "dims", int(os.getenv("OPENROUTER_EMBEDDING_DIMENSIONS", "1536"))
+            )
+            try:
+                dense_query_vector = dense_embedder.embed_query(question)
+            except Exception as exc:
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR))
+                raise
+        note_timing("embed_ms", (time.perf_counter() - started) * 1000)
     sparse_query_vector = list(sparse_embedder.embed([question]))[0]
 
-    candidates = qdrant_client.query_points(
-        collection_name=COLLECTION_NAME,
-        prefetch=[
-            Prefetch(
-                query=dense_query_vector,
-                using="abstract-dense-vector",
-                limit=PREFETCH_LIMIT,
-            ),
-            Prefetch(
-                query=SparseVector(
-                    indices=sparse_query_vector.indices,
-                    values=sparse_query_vector.values,
-                ),
-                using="sparse-vector",
-                limit=PREFETCH_LIMIT,
-            ),
-        ],
-        query=FusionQuery(fusion=Fusion.RRF),
-        limit=RRF_CANDIDATES,
-    ).points
+    started = time.perf_counter()
+    with _tracer.start_as_current_span("qdrant.hybrid_search") as span:
+        span.set_attribute("collection", COLLECTION_NAME)
+        span.set_attribute("limit", RRF_CANDIDATES)
+        try:
+            candidates = qdrant_client.query_points(
+                collection_name=COLLECTION_NAME,
+                prefetch=[
+                    Prefetch(
+                        query=dense_query_vector,
+                        using="abstract-dense-vector",
+                        limit=PREFETCH_LIMIT,
+                    ),
+                    Prefetch(
+                        query=SparseVector(
+                            indices=sparse_query_vector.indices,
+                            values=sparse_query_vector.values,
+                        ),
+                        using="sparse-vector",
+                        limit=PREFETCH_LIMIT,
+                    ),
+                ],
+                query=FusionQuery(fusion=Fusion.RRF),
+                limit=RRF_CANDIDATES,
+            ).points
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR))
+            raise
+        span.set_attribute("num_results", len(candidates))
+    note_timing("qdrant_ms", (time.perf_counter() - started) * 1000)
 
     if not candidates:
         return []
 
-    try:
-        doc_texts = [(r.payload.get("text") or "")[:RERANK_MAX_CHARS] for r in candidates]
-        scores = list(reranker.rerank(question, doc_texts))
-        scored_pairs = sorted(
-            zip(scores, candidates), key=lambda x: x[0], reverse=True
-        )
-        reranked = []
-        for s, candidate in scored_pairs[:top_k]:
-            candidate.score = s
-            reranked.append(candidate)
-
-        print(
-            f"✅ Re-ranked {len(candidates)} candidates → returning top {len(reranked)}"
-        )
-        return reranked
-    except Exception as e:
-        print(f"⚠️  Re-ranking failed ({e}), falling back to RRF order")
-        return candidates[:top_k]
+    started = time.perf_counter()
+    with _tracer.start_as_current_span("rerank") as span:
+        span.set_attribute("model", os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER)
+        span.set_attribute("num_docs", len(candidates))
+        span.set_attribute("top_k", top_k)
+        try:
+            doc_texts = [(r.payload.get("text") or "")[:RERANK_MAX_CHARS] for r in candidates]
+            scores = list(reranker.rerank(question, doc_texts))
+            scored_pairs = sorted(
+                zip(scores, candidates), key=lambda x: x[0], reverse=True
+            )
+            reranked = []
+            for score, candidate in scored_pairs[:top_k]:
+                candidate.score = score
+                reranked.append(candidate)
+            print(
+                f"✅ Re-ranked {len(candidates)} candidates → returning top {len(reranked)}"
+            )
+            return reranked
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR))
+            print(f"⚠️  Re-ranking failed ({e}), falling back to RRF order")
+            return candidates[:top_k]
+        finally:
+            note_timing("rerank_ms", (time.perf_counter() - started) * 1000)

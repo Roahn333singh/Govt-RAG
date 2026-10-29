@@ -50,7 +50,11 @@ from agent.cache_policy import (
     is_premise_correction,
     questions_match,
 )
-from app.telemetry import setup_telemetry
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
+from app.request_context import note_cache, note_question_length, note_timing
+from app.telemetry import run_traced_in_threadpool, setup_telemetry
 from agent.security import (
     SESSION_TOKEN_TTL_SECONDS,
     admin_token_ok,
@@ -152,6 +156,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 setup_telemetry(app)
+_tracer = trace.get_tracer(__name__)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -240,6 +245,7 @@ def resolve_message(message: str | None, chat_data: ChatRequest | None) -> str:
     )
     if not resolved_message:
         raise HTTPException(status_code=422, detail="Message is required.")
+    note_question_length(len(resolved_message))
     try:
         validate_message_length(resolved_message)
     except ValueError as e:
@@ -290,24 +296,60 @@ def _query_cache_sync(query_vector: list, user_lang: str):
     ).points
 
 
+async def _embed_question(message: str) -> list:
+    started = time.perf_counter()
+    with _tracer.start_as_current_span("embed.query") as span:
+        span.set_attribute(
+            "model", os.getenv("OPENROUTER_EMBEDDING_MODEL", "qwen/qwen3-embedding-8b")
+        )
+        span.set_attribute(
+            "dims", int(os.getenv("OPENROUTER_EMBEDDING_DIMENSIONS", "1536"))
+        )
+        try:
+            vector = await run_traced_in_threadpool(
+                search.dense_embedder.embed_query, message
+            )
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR))
+            raise
+    note_timing("embed_ms", (time.perf_counter() - started) * 1000)
+    return vector
+
+
 async def _lookup_cache(message: str, user_lang: str, query_vector: list):
-    cache_results = await asyncio.to_thread(_query_cache_sync, query_vector, user_lang)
-    if not cache_results:
-        return None
-    hit = cache_results[0]
-    if hit.score < CACHE_SIM_THRESHOLD:
-        print(f"❌ CACHE MISS. Closest {hit.score:.2f} (needs > {CACHE_SIM_THRESHOLD})")
-        return None
-    payload = hit.payload or {}
-    cached_q = payload.get("question") or ""
-    if not questions_match(message, cached_q):
-        print(f"❌ CACHE MISS. Wording/numbers differ at score {hit.score:.2f}")
-        return None
-    if not entry_fresh(payload):
-        print("❌ CACHE MISS. Stale prompt/doc version or TTL expired")
-        return None
-    print(f"✅ CACHE HIT! Match Confidence: {hit.score:.2f}")
-    return payload
+    with _tracer.start_as_current_span("cache.lookup") as span:
+        cache_results = await run_traced_in_threadpool(
+            _query_cache_sync, query_vector, user_lang
+        )
+        if not cache_results:
+            span.set_attribute("cache.hit", False)
+            span.set_attribute("cache.score", 0.0)
+            note_cache(False)
+            return None
+        hit = cache_results[0]
+        span.set_attribute("cache.score", float(hit.score or 0))
+        if hit.score < CACHE_SIM_THRESHOLD:
+            print(f"❌ CACHE MISS. Closest {hit.score:.2f} (needs > {CACHE_SIM_THRESHOLD})")
+            span.set_attribute("cache.hit", False)
+            note_cache(False)
+            return None
+        payload = hit.payload or {}
+        cached_q = payload.get("question") or ""
+        if not questions_match(message, cached_q):
+            print(f"❌ CACHE MISS. Wording/numbers differ at score {hit.score:.2f}")
+            span.set_attribute("cache.hit", False)
+            note_cache(False)
+            return None
+        if not entry_fresh(payload):
+            print("❌ CACHE MISS. Stale prompt/doc version or TTL expired")
+            span.set_attribute("cache.hit", False)
+            note_cache(False)
+            return None
+        print(f"✅ CACHE HIT! Match Confidence: {hit.score:.2f}")
+        span.set_attribute("cache.hit", True)
+        note_cache(True)
+        return payload
 
 
 async def _write_cache(
@@ -465,12 +507,14 @@ async def users_chat(
         async def _run_chat():
             remembered = _recall_exact(message, user_lang)
             if remembered:
+                with _tracer.start_as_current_span("cache.lookup") as span:
+                    span.set_attribute("cache.hit", True)
+                    span.set_attribute("cache.score", 1.0)
+                note_cache(True)
                 return _chat_response(
                     remembered["answer"], remembered["sources"], session_id, cached=True
                 )
-            query_vector = await asyncio.to_thread(
-                search.dense_embedder.embed_query, message
-            )
+            query_vector = await _embed_question(message)
 
             cached = await _lookup_cache(message, user_lang, query_vector)
             if cached:
@@ -554,6 +598,10 @@ async def users_chat_stream(
     try:
         remembered = _recall_exact(message, user_lang)
         if remembered:
+            with _tracer.start_as_current_span("cache.lookup") as span:
+                span.set_attribute("cache.hit", True)
+                span.set_attribute("cache.score", 1.0)
+            note_cache(True)
 
             async def exact_stream():
                 for piece in _text_chunks(remembered["answer"]):
@@ -569,9 +617,7 @@ async def users_chat_stream(
 
             return StreamingResponse(exact_stream(), media_type="text/event-stream")
 
-        query_vector = await asyncio.to_thread(
-            search.dense_embedder.embed_query, message
-        )
+        query_vector = await _embed_question(message)
         cached = await _lookup_cache(message, user_lang, query_vector)
         if cached:
             raw = cached.get("answer") or ""

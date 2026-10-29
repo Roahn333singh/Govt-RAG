@@ -2,6 +2,9 @@ import asyncio
 import os
 import sys
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
 from dotenv import load_dotenv
 
 # Add the parent folder to Python's path so we can import vectorDB
@@ -10,6 +13,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from langchain_core.messages import AIMessage
 from langgraph.graph import START, MessagesState, StateGraph
 from vectorDB.search import run_hybrid_search
+
+from app.telemetry import annotate_llm, run_traced_in_threadpool, traced_node
 
 from agent.guards import (
     PROMPT_VERSION,
@@ -24,6 +29,7 @@ load_dotenv(override=True)
 
 _llm_cache = {}
 _compiled_graph = None
+_tracer = trace.get_tracer(__name__)
 
 # OpenRouter hosts the chat model (rewrite + generate).
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -72,7 +78,12 @@ class RagState(MessagesState):
     query_vector: list | None
 
 
+def _llm_model() -> str:
+    return os.getenv("OPENROUTER_LLM_MODEL", "google/gemini-2.5-flash")
+
+
 # ── Node 1: Query Rewriter ─────────────────────────────────────────────────────
+@traced_node("node.rewriter", "rewrite_ms")
 async def query_rewriter_node(state: RagState):
     user_query = state["messages"][-1].content
     answer_language = state.get("answer_language") or detect_answer_language(
@@ -109,9 +120,18 @@ HI: एफएमआईएससी बाढ़ निगरानी पोर�
 """
 
     try:
-        response = await asyncio.wait_for(
-            get_llm(temperature=0.0).ainvoke(prompt), timeout=REWRITER_TIMEOUT_SECONDS
-        )
+        with _tracer.start_as_current_span("llm.openrouter") as llm_span:
+            llm_span.set_attribute("model", _llm_model())
+            try:
+                response = await asyncio.wait_for(
+                    get_llm(temperature=0.0).ainvoke(prompt),
+                    timeout=REWRITER_TIMEOUT_SECONDS,
+                )
+                annotate_llm(llm_span, response, _llm_model())
+            except Exception as exc:
+                llm_span.record_exception(exc)
+                llm_span.set_status(Status(StatusCode.ERROR))
+                raise
         raw_rewrite = response.content or ""
     except Exception as e:
         # Retrieval on the raw question is still useful; don't fail the request.
@@ -136,6 +156,7 @@ def _hit_key(hit) -> tuple:
     )
 
 
+@traced_node("node.retriever")
 async def retriever_node(state: RagState):
     raw_query = state["messages"][-1].content
     query_vector = state.get("query_vector")
@@ -146,8 +167,10 @@ async def retriever_node(state: RagState):
     ]
 
     # Raw question reuses the embedding from the cache lookup; EN and HI are fresh.
-    searches = [asyncio.to_thread(run_hybrid_search, raw_query, _TOP_K, query_vector)]
-    searches += [asyncio.to_thread(run_hybrid_search, q, _TOP_K, None) for q in extras[:2]]
+    searches = [run_traced_in_threadpool(run_hybrid_search, raw_query, _TOP_K, query_vector)]
+    searches += [
+        run_traced_in_threadpool(run_hybrid_search, q, _TOP_K, None) for q in extras[:2]
+    ]
     batches = await asyncio.gather(*searches)
 
     best: dict[tuple, object] = {}
@@ -191,6 +214,7 @@ async def retriever_node(state: RagState):
 
 
 # ── Node 3: Generator ──────────────────────────────────────────────────────────
+@traced_node("node.generator", "generate_ms")
 async def generator_node(state: RagState):
     if state["context"] == "REJECT":
         return {
@@ -235,7 +259,15 @@ Context:
 </user_question>
 Answer:"""
 
-    response = await get_llm(temperature=0.1).ainvoke(prompt)
+    with _tracer.start_as_current_span("llm.openrouter") as llm_span:
+        llm_span.set_attribute("model", _llm_model())
+        try:
+            response = await get_llm(temperature=0.1).ainvoke(prompt)
+            annotate_llm(llm_span, response, _llm_model())
+        except Exception as exc:
+            llm_span.record_exception(exc)
+            llm_span.set_status(Status(StatusCode.ERROR))
+            raise
     text = response.content if isinstance(response.content, str) else ""
     return {"messages": [response], "sources": cited_sources(text, state.get("sources"))}
 

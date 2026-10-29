@@ -15,6 +15,8 @@ import random
 import time
 
 import httpx
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
 DEFAULT_MODEL = "qwen/qwen3-embedding-8b"
@@ -29,6 +31,7 @@ QUERY_INSTRUCTION = (
 )
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_tracer = trace.get_tracer(__name__)
 
 
 class OpenRouterEmbeddings:
@@ -81,9 +84,24 @@ class OpenRouterEmbeddings:
         last_error: Exception | None = None
         for attempt in range(self.max_retries):
             try:
-                response = self._http.post(OPENROUTER_EMBEDDINGS_URL, json=payload)
-                response.raise_for_status()
-                data = response.json()
+                with _tracer.start_as_current_span("llm.openrouter") as span:
+                    span.set_attribute("model", self.model)
+                    try:
+                        response = self._http.post(OPENROUTER_EMBEDDINGS_URL, json=payload)
+                        span.set_attribute("http.status_code", response.status_code)
+                        response.raise_for_status()
+                        data = response.json()
+                        usage = data.get("usage") or {}
+                        span.set_attribute("prompt_tokens", int(usage.get("prompt_tokens") or 0))
+                        span.set_attribute(
+                            "completion_tokens", int(usage.get("completion_tokens") or 0)
+                        )
+                    except Exception as exc:
+                        span.record_exception(exc)
+                        span.set_status(Status(StatusCode.ERROR))
+                        if isinstance(exc, httpx.HTTPStatusError):
+                            span.set_attribute("http.status_code", exc.response.status_code)
+                        raise
                 items = sorted(data.get("data", []), key=lambda x: x.get("index", 0))
                 vectors = [item["embedding"] for item in items]
                 if len(vectors) != len(texts):
