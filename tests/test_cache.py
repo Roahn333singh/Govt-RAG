@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 from types import SimpleNamespace
 
 from qdrant_client.models import PointStruct
@@ -26,6 +27,35 @@ def _payload(question, answer="Cached answer.", **over):
     }
     p.update(over)
     return p
+
+
+def test_similarity_floor_accepts_0_9977():
+    from agent.cache_policy import clears_similarity_threshold
+
+    assert clears_similarity_threshold(0.9977)
+    assert clears_similarity_threshold(0.95)
+    assert not clears_similarity_threshold(0.949)
+    assert not clears_similarity_threshold("nope")
+
+
+def test_semantic_hit_is_logged(client, fakes, capsys):
+    q = "Is the IGRS upload limit 500 KB?"
+    fakes.qdrant.next_hit = SimpleNamespace(score=0.9977, payload=_payload(q, "Cached 500 KB."))
+    r = client.post("/chat", json={"message": q}, headers=API_HEADERS)
+    assert r.json()["cached"] is True
+    lines = [line for line in capsys.readouterr().out.splitlines() if '"request_done"' in line]
+    payload = json.loads(lines[-1])
+    assert payload["cache_hit"] is True
+
+
+def test_exact_repeat_logs_cache_hit(client, fakes, capsys):
+    body = {"message": "What is the Pragati portal used for?"}
+    client.post("/chat", json=body, headers=API_HEADERS)
+    capsys.readouterr()
+    again = client.post("/chat", json=body, headers=API_HEADERS)
+    assert again.json()["cached"] is True
+    lines = [line for line in capsys.readouterr().out.splitlines() if '"request_done"' in line]
+    assert json.loads(lines[-1])["cache_hit"] is True
 
 
 def test_number_mismatch_is_a_miss():

@@ -54,7 +54,7 @@ cat > "${ENV_FILE}" <<EOF
 OPENROUTER_LLM_MODEL: "google/gemini-2.5-flash"
 OPENROUTER_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
-RERANKER_MODEL: "jinaai/jina-reranker-v2-base-multilingual"
+RERANKER_MODEL: "Xenova/ms-marco-MiniLM-L-6-v2"
 DOC_VERSION: "2026-10-27"
 GIT_SHA: "$(git rev-parse --short HEAD)"
 OTEL_ENABLED: "true"

@@ -35,6 +35,15 @@ def note_cache(hit: bool) -> None:
         fields["cache_hit"] = hit
 
 
+def note_thread(name: str | None = None) -> None:
+    """Record the worker that ran the pool function. The middleware thread is not useful."""
+    import threading
+
+    fields = _fields.get()
+    if fields is not None:
+        fields["thread"] = name or threading.current_thread().name
+
+
 def note_timing(name: str, elapsed_ms: float) -> None:
     fields = _fields.get()
     if fields is None:

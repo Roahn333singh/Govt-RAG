@@ -86,7 +86,8 @@ def main():
     ):
         for q in questions:
             t0 = time.perf_counter()
-            hits = search.run_hybrid_search(q, top_k=8)
+            candidates = search.run_hybrid_search(q)
+            hits = search.rerank_hits(q, candidates[: search.RERANK_POOL], top_k=8)
             latencies.append(time.perf_counter() - t0)
             top = hits[0].score if hits else float("-inf")
             bucket.append(top)

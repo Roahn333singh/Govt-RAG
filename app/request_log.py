@@ -43,7 +43,6 @@ def install_request_logging(app) -> None:
         global _in_flight
         with _lock:
             _in_flight += 1
-            entered = _in_flight
         request_id = uuid.uuid4().hex
         token = begin_request_fields()
         started = time.perf_counter()
@@ -56,9 +55,14 @@ def install_request_logging(app) -> None:
         finally:
             fields = end_request_fields(token)
             with _lock:
+                # Count includes this request. Read it before we drop our slot.
+                in_flight = _in_flight
                 _in_flight -= 1
             duration_ms = round((time.perf_counter() - started) * 1000, 2)
             timings = fields.get("timings") or {}
+            served = getattr(request.state, "cache_hit", None)
+            if served is None:
+                served = fields.get("cache_hit")
             line = {
                 "severity": "ERROR" if status >= 500 else "INFO",
                 "message": "request_done",
@@ -70,9 +74,9 @@ def install_request_logging(app) -> None:
                 "instance_id": current_instance,
                 "revision": revision,
                 "pid": os.getpid(),
-                "thread": threading.current_thread().name,
-                "in_flight": entered,
-                "cache_hit": bool(fields.get("cache_hit")),
+                "thread": fields.get("thread"),
+                "in_flight": in_flight,
+                "cache_hit": bool(served),
                 "question_length": fields.get("question_length"),
                 "rewrite_ms": timings.get("rewrite_ms", 0),
                 "embed_ms": timings.get("embed_ms", 0),

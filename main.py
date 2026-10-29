@@ -45,6 +45,7 @@ from agent.guards import (
 )
 from agent.cache_policy import (
     CACHE_SIM_THRESHOLD,
+    clears_similarity_threshold,
     doc_version,
     entry_fresh,
     is_premise_correction,
@@ -330,9 +331,10 @@ async def _lookup_cache(message: str, user_lang: str, query_vector: list):
             note_cache(False)
             return None
         hit = cache_results[0]
-        span.set_attribute("cache.score", float(hit.score or 0))
-        if hit.score < CACHE_SIM_THRESHOLD:
-            print(f"❌ CACHE MISS. Closest {hit.score:.2f} (needs > {CACHE_SIM_THRESHOLD})")
+        score = float(hit.score) if hit.score is not None else 0.0
+        span.set_attribute("cache.score", score)
+        if not clears_similarity_threshold(score):
+            print(f"❌ CACHE MISS. Closest {score:.4f} (needs >= {CACHE_SIM_THRESHOLD})")
             span.set_attribute("cache.hit", False)
             note_cache(False)
             return None
@@ -382,7 +384,9 @@ async def _write_cache(
     )
 
 
-def _busy_response(session_id: str) -> JSONResponse:
+def _busy_response(request: Request, session_id: str) -> JSONResponse:
+    request.state.cache_hit = False
+    note_cache(False)
     return JSONResponse(
         status_code=503,
         headers={"Retry-After": "5"},
@@ -416,7 +420,13 @@ def _chat_response(
     sources: list | None,
     session_id: str,
     cached: bool,
+    request: Request | None = None,
 ) -> dict:
+    # The log reads this off the request. The contextvar alone is not visible
+    # to the middleware task that prints request_done.
+    if request is not None:
+        request.state.cache_hit = bool(cached)
+    note_cache(bool(cached))
     return {
         "answer": answer,
         "sources": cited_sources(answer, sources),
@@ -503,7 +513,7 @@ async def users_chat(
     user_lang = detect_answer_language(message)
 
     if is_injection(message):
-        return _chat_response(INJECTION_REFUSAL, [], session_id, cached=False)
+        return _chat_response(INJECTION_REFUSAL, [], session_id, False, request)
 
     try:
         async def _run_chat():
@@ -514,7 +524,7 @@ async def users_chat(
                     span.set_attribute("cache.score", 1.0)
                 note_cache(True)
                 return _chat_response(
-                    remembered["answer"], remembered["sources"], session_id, cached=True
+                    remembered["answer"], remembered["sources"], session_id, True, request
                 )
             query_vector = await _embed_question(message)
 
@@ -522,13 +532,14 @@ async def users_chat(
             if cached:
                 raw = cached.get("answer") or ""
                 if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
-                    return _chat_response(INJECTION_REFUSAL, [], session_id, cached=False)
+                    return _chat_response(INJECTION_REFUSAL, [], session_id, False, request)
                 answer = filter_output(raw, message) or REFUSAL_TEXT
                 return _chat_response(
                     answer,
                     cached.get("sources") or [],
                     session_id,
-                    cached=True,
+                    True,
+                    request,
                 )
 
             print("Asking processor to think...")
@@ -562,16 +573,16 @@ async def users_chat(
                 )
             _remember_exact(message, user_lang, final_answer, sources)
 
-            return _chat_response(final_answer, sources, session_id, cached=False)
+            return _chat_response(final_answer, sources, session_id, False, request)
 
         return await asyncio.wait_for(_run_chat(), timeout=REQUEST_TIMEOUT_SECONDS)
 
     except asyncio.TimeoutError:
         print(f"/chat timeout after {REQUEST_TIMEOUT_SECONDS}s")
-        return _busy_response(session_id)
+        return _busy_response(request, session_id)
     except Exception as e:
         print(f"/chat error: {type(e).__name__}: {e}")
-        return _busy_response(session_id)
+        return _busy_response(request, session_id)
 
 
 @app.post("/chat/stream")
@@ -590,6 +601,7 @@ async def users_chat_stream(
     user_lang = detect_answer_language(message)
 
     if is_injection(message):
+        request.state.cache_hit = False
 
         async def refusal_stream():
             yield _sse({"type": "token", "text": INJECTION_REFUSAL})
@@ -603,6 +615,7 @@ async def users_chat_stream(
             with _tracer.start_as_current_span("cache.lookup") as span:
                 span.set_attribute("cache.hit", True)
                 span.set_attribute("cache.score", 1.0)
+            request.state.cache_hit = True
             note_cache(True)
 
             async def exact_stream():
@@ -625,9 +638,12 @@ async def users_chat_stream(
             raw = cached.get("answer") or ""
             if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
                 answer, sources = INJECTION_REFUSAL, []
+                request.state.cache_hit = False
             else:
                 answer = filter_output(raw, message) or REFUSAL_TEXT
                 sources = cited_sources(answer, cached.get("sources") or [])
+                request.state.cache_hit = True
+            note_cache(bool(request.state.cache_hit))
 
             async def cached_stream():
                 for piece in _text_chunks(answer):
@@ -717,6 +733,7 @@ async def users_chat_stream(
                 yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
                 yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
 
+        request.state.cache_hit = False
         return StreamingResponse(
             generate_and_save_stream(), media_type="text/event-stream"
         )
@@ -727,4 +744,5 @@ async def users_chat_stream(
             yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
             yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
 
+        request.state.cache_hit = False
         return StreamingResponse(err_stream(), media_type="text/event-stream")

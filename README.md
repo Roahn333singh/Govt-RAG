@@ -216,7 +216,7 @@ Nothing secret is baked into the image. `deploy.sh` reads these from Secret Mana
 | `ADMIN_TOKEN` | `X-Admin-Token` for `POST /admin/cache/purge` |
 | `RATE_LIMIT_STORAGE_URI` | Upstash `rediss://` URL. Optional; without it, limits are per instance |
 
-Plain environment (set in the deploy env file, not secret): `OPENROUTER_LLM_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, `OPENROUTER_EMBEDDING_DIMENSIONS`, `RERANKER_MODEL`, `ALLOWED_ORIGINS`, `DOC_VERSION`, `GIT_SHA`. `ENABLE_DOCS=1` turns `/docs` back on. `REJECT_THRESHOLD` retunes the reranker floor.
+Plain environment (set in the deploy env file, not secret): `OPENROUTER_LLM_MODEL`, `OPENROUTER_EMBEDDING_MODEL`, `OPENROUTER_EMBEDDING_DIMENSIONS`, `RERANKER_MODEL` (default `Xenova/ms-marco-MiniLM-L-6-v2`; `jinaai/jina-reranker-v2-base-multilingual` is optional), `ALLOWED_ORIGINS`, `DOC_VERSION`, `GIT_SHA`. `ENABLE_DOCS=1` turns `/docs` back on. `REJECT_THRESHOLD` retunes the reranker floor. `CACHE_SIM_THRESHOLD` (default 0.95) is a cosine similarity floor: a score at or above it can be served.
 
 ### Example Request
 

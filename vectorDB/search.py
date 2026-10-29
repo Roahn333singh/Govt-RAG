@@ -1,3 +1,4 @@
+import asyncio
 import os
 import time
 
@@ -33,9 +34,13 @@ CACHE_COLLECTION_NAME = "semantic-query-cache"
 # Rerank / retrieve pool sizes — balanced for recall vs Cloud Run memory
 PREFETCH_LIMIT = 40
 RRF_CANDIDATES = int(os.getenv("RRF_CANDIDATES", "28"))
-# Cross-encoder cost grows with input length; chunks rarely need more than this to rank
-RERANK_MAX_CHARS = int(os.getenv("RERANK_MAX_CHARS", "1200"))
-DEFAULT_RERANKER = "jinaai/jina-reranker-v2-base-multilingual"
+# One cross-encoder pass over the fused pool, not one pass per query variant.
+RERANK_POOL = int(os.getenv("RERANK_POOL", "20"))
+RRF_K = 60
+# Cross-encoder sequence length. MiniLM's native max is 512; longer inputs
+# (jina's default) are what blew the 8 GiB Cloud Run limit.
+RERANK_MAX_TOKENS = int(os.getenv("RERANK_MAX_TOKENS", "512"))
+DEFAULT_RERANKER = "Xenova/ms-marco-MiniLM-L-6-v2"
 
 # Init Client and Embedder
 qdrant_client = QdrantClient(
@@ -50,6 +55,8 @@ reranker = None
 dense_embedder = None
 sparse_embedder = None
 _services_ready = False
+# One rerank per instance. Other requests wait instead of stacking ONNX sessions.
+_rerank_slots = asyncio.Semaphore(1)
 
 
 def init_services():
@@ -85,6 +92,7 @@ def init_services():
     if reranker is None:
         model = os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER
         reranker = TextCrossEncoder(model_name=model)
+        _cap_rerank_length(reranker)
     _services_ready = True
     print("Services ready!")
 
@@ -95,17 +103,62 @@ def services_ready() -> bool:
     )
 
 
+def _cap_rerank_length(encoder) -> None:
+    """Bound the ONNX sequence so a long-context model cannot be selected by accident."""
+    tok = getattr(getattr(encoder, "model", None), "tokenizer", None)
+    if tok is not None and hasattr(tok, "enable_truncation"):
+        tok.enable_truncation(max_length=RERANK_MAX_TOKENS)
+
+
+def truncate_for_rerank(text: str) -> str:
+    """Keep about RERANK_MAX_TOKENS tokens. Char cap is the fallback."""
+    text = text or ""
+    tok = getattr(getattr(reranker, "model", None), "tokenizer", None)
+    if tok is not None:
+        try:
+            enc = tok.encode(text, add_special_tokens=False)
+            ids = list(getattr(enc, "ids", enc))
+            if len(ids) <= RERANK_MAX_TOKENS:
+                return text
+            return tok.decode(ids[:RERANK_MAX_TOKENS])
+        except Exception:
+            pass
+    return text[: RERANK_MAX_TOKENS * 4]
+
+
+def _hit_key(hit) -> tuple:
+    payload = hit.payload or {}
+    return (
+        payload.get("document-id"),
+        payload.get("page"),
+        (payload.get("text") or "")[:120],
+    )
+
+
+def rrf_merge(batches: list, limit: int = RERANK_POOL) -> list:
+    """Fuse ranked lists from query variants. Higher reciprocal rank wins."""
+    scores: dict[tuple, float] = {}
+    chosen: dict[tuple, object] = {}
+    for batch in batches:
+        for rank, hit in enumerate(batch or [], start=1):
+            key = _hit_key(hit)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (RRF_K + rank)
+            if key not in chosen:
+                chosen[key] = hit
+    ordered = sorted(scores, key=lambda key: scores[key], reverse=True)
+    return [chosen[key] for key in ordered[:limit]]
+
+
 def run_hybrid_search(
     question: str,
-    top_k: int = 6,
+    limit: int = RRF_CANDIDATES,
     dense_vector: list[float] | None = None,
 ):
     """
-    Two-stage retrieval:
-      Stage 1 — Hybrid Search (Dense + Sparse RRF)
-      Stage 2 — Cross-Encoder Re-ranking
+    Hybrid search only (dense + sparse, fused with RRF inside Qdrant).
 
-    Pass dense_vector to reuse an embedding already computed (e.g. cache lookup).
+    Cross-encoder rerank is a separate once-per-request step. Pass dense_vector
+    to reuse an embedding already computed for the cache lookup.
     """
     print(f"\nQuerying: '{question[:80]}'...")
 
@@ -133,7 +186,7 @@ def run_hybrid_search(
     started = time.perf_counter()
     with _tracer.start_as_current_span("qdrant.hybrid_search") as span:
         span.set_attribute("collection", COLLECTION_NAME)
-        span.set_attribute("limit", RRF_CANDIDATES)
+        span.set_attribute("limit", limit)
         try:
             candidates = qdrant_client.query_points(
                 collection_name=COLLECTION_NAME,
@@ -153,7 +206,7 @@ def run_hybrid_search(
                     ),
                 ],
                 query=FusionQuery(fusion=Fusion.RRF),
-                limit=RRF_CANDIDATES,
+                limit=limit,
             ).points
         except Exception as exc:
             span.record_exception(exc)
@@ -162,23 +215,30 @@ def run_hybrid_search(
         span.set_attribute("num_results", len(candidates))
     note_timing("qdrant_ms", (time.perf_counter() - started) * 1000)
 
+    return candidates
+
+
+def rerank_hits(question: str, candidates: list, top_k: int):
+    """Score one fused pool. Documents are truncated before the cross-encoder."""
     if not candidates:
         return []
-
     started = time.perf_counter()
     with _tracer.start_as_current_span("rerank") as span:
         span.set_attribute("model", os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER)
         span.set_attribute("num_docs", len(candidates))
         span.set_attribute("top_k", top_k)
+        span.set_attribute("max_length", RERANK_MAX_TOKENS)
         try:
-            doc_texts = [(r.payload.get("text") or "")[:RERANK_MAX_CHARS] for r in candidates]
+            doc_texts = [
+                truncate_for_rerank(r.payload.get("text") or "") for r in candidates
+            ]
             scores = list(reranker.rerank(question, doc_texts))
             scored_pairs = sorted(
                 zip(scores, candidates), key=lambda x: x[0], reverse=True
             )
             reranked = []
             for score, candidate in scored_pairs[:top_k]:
-                candidate.score = score
+                candidate.score = float(score)
                 reranked.append(candidate)
             print(
                 f"✅ Re-ranked {len(candidates)} candidates → returning top {len(reranked)}"
@@ -191,3 +251,11 @@ def run_hybrid_search(
             return candidates[:top_k]
         finally:
             note_timing("rerank_ms", (time.perf_counter() - started) * 1000)
+
+
+async def rerank_once(question: str, candidates: list, top_k: int):
+    """One rerank at a time on this instance. Callers wait on the semaphore."""
+    from app.telemetry import run_traced_in_threadpool
+
+    async with _rerank_slots:
+        return await run_traced_in_threadpool(rerank_hits, question, candidates, top_k)

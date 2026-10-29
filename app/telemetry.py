@@ -72,8 +72,11 @@ def run_traced_in_threadpool(fn, *args, **kwargs):
     ctx = otel_context.get_current()
 
     def _call():
+        from app.request_context import note_thread
+
         token = otel_context.attach(ctx)
         try:
+            note_thread()
             return fn(*args, **kwargs)
         finally:
             otel_context.detach(token)

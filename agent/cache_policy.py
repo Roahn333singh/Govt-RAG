@@ -42,6 +42,21 @@ _PREMISE_CORRECTION_RE = re.compile(
 )
 
 
+def clears_similarity_threshold(score) -> bool:
+    """Qdrant cosine score is similarity: 1.0 is identical, higher is closer.
+
+    A score of 0.9977 clears the default 0.95 floor. Equality counts as a hit.
+    Values that are not numbers do not.
+    """
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return False
+    if value != value:  # NaN
+        return False
+    return value >= CACHE_SIM_THRESHOLD
+
+
 def doc_version() -> str:
     return os.getenv("DOC_VERSION", "1")
 

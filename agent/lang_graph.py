@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from langchain_core.messages import AIMessage
 from langgraph.graph import START, MessagesState, StateGraph
-from vectorDB.search import run_hybrid_search
+from vectorDB.search import RERANK_POOL, RRF_CANDIDATES, rerank_once, rrf_merge, run_hybrid_search
 
 from app.telemetry import annotate_llm, run_traced_in_threadpool, traced_node
 
@@ -147,15 +147,6 @@ HI: एफएमआईएससी बाढ़ निगरानी पोर�
 
 
 # ── Node 2: Retriever ──────────────────────────────────────────────────────────
-def _hit_key(hit) -> tuple:
-    payload = hit.payload or {}
-    return (
-        payload.get("document-id"),
-        payload.get("page"),
-        (payload.get("text") or "")[:120],
-    )
-
-
 @traced_node("node.retriever")
 async def retriever_node(state: RagState):
     raw_query = state["messages"][-1].content
@@ -167,27 +158,22 @@ async def retriever_node(state: RagState):
     ]
 
     # Raw question reuses the embedding from the cache lookup; EN and HI are fresh.
-    searches = [run_traced_in_threadpool(run_hybrid_search, raw_query, _TOP_K, query_vector)]
+    # Each call is hybrid search only. Rerank happens once on the fused pool.
+    searches = [
+        run_traced_in_threadpool(run_hybrid_search, raw_query, RRF_CANDIDATES, query_vector)
+    ]
     searches += [
-        run_traced_in_threadpool(run_hybrid_search, q, _TOP_K, None) for q in extras[:2]
+        run_traced_in_threadpool(run_hybrid_search, q, RRF_CANDIDATES, None)
+        for q in extras[:2]
     ]
     batches = await asyncio.gather(*searches)
+    merged = rrf_merge(batches, limit=RERANK_POOL)
+    if not merged:
+        return {"context": "REJECT", "sources": []}
 
-    best: dict[tuple, object] = {}
-    for batch in batches:
-        for hit in batch or []:
-            key = _hit_key(hit)
-            current = best.get(key)
-            if current is None or float(hit.score or 0) > float(current.score or 0):
-                best[key] = hit
-
+    ranked = await rerank_once(raw_query, merged, _TOP_K)
     # Refuse only when nothing clears the floor, then keep the strongest eight.
-    passed = sorted(
-        (h for h in best.values() if float(h.score or 0) >= _REJECT_THRESHOLD),
-        key=lambda h: float(h.score or 0),
-        reverse=True,
-    )[:_TOP_K]
-    context = passed
+    context = [h for h in ranked if float(h.score or 0) >= _REJECT_THRESHOLD][:_TOP_K]
 
     if not context:
         return {"context": "REJECT", "sources": []}
