@@ -205,11 +205,10 @@ function setupListeners() {
 
     btnNewChat.addEventListener("click", startNewChat);
 
-    // Chapter button click actions
+    // Suggested questions send the line the user is reading, in the active language.
     document.querySelectorAll(".nav-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
-            const query = btn.getAttribute("data-query");
-            triggerQuickQuery(query);
+            triggerQuickQuery(visibleQuery(btn));
             // Close mobile sidebar if open
             if (sidebar.classList.contains("is-active")) {
                 sidebar.classList.remove("is-active");
@@ -220,8 +219,7 @@ function setupListeners() {
     // Suggestion chip clicks
     document.querySelectorAll(".chip").forEach((btn) => {
         btn.addEventListener("click", () => {
-            const query = btn.getAttribute("data-query");
-            triggerQuickQuery(query);
+            triggerQuickQuery(visibleQuery(btn));
         });
     });
 
@@ -293,6 +291,11 @@ function setupListeners() {
             applyUiLang(uiLang === "hi" ? "en" : "hi");
         });
     }
+}
+
+function visibleQuery(btn) {
+    const key = btn.getAttribute("data-i18n-query");
+    return (key ? t(key) : "").trim();
 }
 
 // Helper to trigger query

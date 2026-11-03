@@ -1,0 +1,9 @@
+# Gate limits for eval/run_eval.py --gate.
+# recall_at_8_drop_pts is a drop from eval/baseline.json, in percentage points.
+# The other limits are absolute.
+recall_at_8_drop_pts: 3
+faithfulness_min: 0.90
+false_refusal_max: 0.05
+correct_refusal_min: 0.90
+p95_latency_s_max: 15
+error_rate_max: 0.02

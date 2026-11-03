@@ -6,7 +6,7 @@
 <title>Manual AI · सिंचाई एवं जल संसाधन विभाग</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Serif:wght@500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <script>
@@ -24,14 +24,14 @@ tailwind.config = {
         mute: "#5f6b7c",
       },
       fontFamily: {
-        display: ['"Noto Serif"', "serif"],
-        sans: ['Figtree', "system-ui", "sans-serif"],
+        display: ['Geist', '"Noto Sans Devanagari"', "system-ui", "sans-serif"],
+        sans: ['Geist', '"Noto Sans Devanagari"', "system-ui", "sans-serif"],
       },
     },
   },
 };
 </script>
-<link rel="stylesheet" href="./stitch-bridge.css?v=422"/>
+<link rel="stylesheet" href="./stitch-bridge.css?v=423"/>
 <meta http-equiv="Cache-Control" content="no-cache"/>
 <script>
   if (localStorage.getItem("manual_ai_theme") === "dark") {
@@ -90,27 +90,27 @@ tailwind.config = {
       <p class="text-[10px] font-bold tracking-wider uppercase text-terracotta" data-i18n="suggested">सुझाए गए प्रश्न</p>
     </div>
     <nav class="flex-1 overflow-y-auto px-2 pb-3 space-y-1 custom-scrollbar">
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the official URL for the Pragati Portal?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_pragati">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_pragati">प्रगति पोर्टल URL</p>
         <p class="text-[11px] text-mute mt-0.5">G.O. Tech / २०२३</p>
       </button>
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the maximum file size allowed for uploading attachments on the IGRS portal?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_igrs">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_igrs">IGRS अधिकतम फाइल साइज</p>
         <p class="text-[11px] text-mute mt-0.5">शासनादेश 412/IGRS/24</p>
       </button>
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="200 crore se zyada ke project cost ke liye financial approval dene ki authority kiske paas hoti hai?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_200cr">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_200cr">₹200 करोड़+ स्वीकृति</p>
         <p class="text-[11px] text-mute mt-0.5" data-i18n="nav_200cr_meta">वित्तीय हस्तपुस्तिका</p>
       </button>
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="निविदा समिति के कार्य क्या हैं?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_tender">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_tender">निविदा समिति के कार्य</p>
         <p class="text-[11px] text-mute mt-0.5">PWD Manual Ch. 42</p>
       </button>
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What is the constitutional basis for a government servant's tenure?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_310">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_310">अनुच्छेद ३१० · सेवा अवधि</p>
         <p class="text-[11px] text-mute mt-0.5" data-i18n="nav_310_meta">सिविल सेवा नियमावली</p>
       </button>
-      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-query="What are the financial powers of a Chief Engineer?">
+      <button type="button" class="nav-btn w-full text-left px-2.5 py-2 rounded border border-transparent hover:border-rule hover:bg-parchment transition-colors" data-i18n-query="nav_ce">
         <p class="text-sm font-semibold leading-snug" data-i18n="nav_ce">मुख्य अभियंता के वित्तीय अधिकार</p>
         <p class="text-[11px] text-mute mt-0.5">Delegation of Powers</p>
       </button>
@@ -129,19 +129,19 @@ tailwind.config = {
           </p>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="Under what conditions can a single-bid tender be accepted?">
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-i18n-query="chip1">
             <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip1_tag">निविदा</p>
             <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip1">एकल बोली निविदा कब स्वीकार्य?</p>
           </button>
-          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="What are the financial powers of a Chief Engineer?">
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-i18n-query="chip2">
             <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip2_tag">वित्त</p>
             <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip2">मुख्य अभियंता की वित्तीय शक्तियाँ</p>
           </button>
-          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="On what date was the IGRS (Jan-Sunwai) system implemented at the district level?">
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-i18n-query="chip3">
             <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta">IGRS</p>
             <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip3">जन-सुनवाई जिला स्तर पर कब लागू?</p>
           </button>
-          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-query="What is the constitutional basis for a government servant's tenure?">
+          <button type="button" class="chip text-left p-3 rounded border border-rule bg-white/70 hover:border-terracotta hover:bg-white transition-colors" data-i18n-query="chip4">
             <p class="text-[10px] font-bold uppercase tracking-wide text-terracotta" data-i18n="chip4_tag">अधिष्ठान</p>
             <p class="text-sm font-semibold mt-1 leading-snug" data-i18n="chip4">सरकारी सेवक की सेवा अवधि का आधार</p>
           </button>

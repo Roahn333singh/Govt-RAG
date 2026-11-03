@@ -39,9 +39,9 @@ REWRITER_TIMEOUT_SECONDS = float(os.getenv("REWRITER_TIMEOUT_SECONDS", "15"))
 
 # Cap total context chars sent to the generator
 _MAX_CONTEXT_CHARS = 12_000
-# Chunks kept after the cross-encoder. Tune the floor with scripts/rerank_scores.py;
-# a permissive default refuses only clearly unrelated hits.
-_REJECT_THRESHOLD = float(os.getenv("REJECT_THRESHOLD", "-10.0"))
+# Chunks kept after the cross-encoder. The floor is reject_threshold(), read per
+# request: REJECT_THRESHOLD overrides the per-backend values. Unset minilm stays
+# -10.0. RERANKER=none skips the floor.
 _TOP_K = 8
 
 
@@ -172,8 +172,14 @@ async def retriever_node(state: RagState):
         return {"context": "REJECT", "sources": []}
 
     ranked = await rerank_once(raw_query, merged, _TOP_K)
-    # Refuse only when nothing clears the floor, then keep the strongest eight.
-    context = [h for h in ranked if float(h.score or 0) >= _REJECT_THRESHOLD][:_TOP_K]
+    from vectorDB.rerankers import log_skipped_threshold, reject_threshold
+
+    threshold = reject_threshold()
+    if threshold is None:
+        log_skipped_threshold()
+        context = list(ranked)[:_TOP_K]
+    else:
+        context = [h for h in ranked if float(h.score or 0) >= threshold][:_TOP_K]
 
     if not context:
         return {"context": "REJECT", "sources": []}

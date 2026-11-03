@@ -35,10 +35,12 @@ dependencies = [
     "opentelemetry-exporter-gcp-trace>=1.15.0",
     "opentelemetry-propagator-gcp>=1.15.0",
     "opentelemetry-resourcedetector-gcp>=1.14.0",
+    "google-cloud-storage>=3.4.1",
 ]
 
 [dependency-groups]
 dev = [
+    "google-cloud-storage>=2.18.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.1",
 ]

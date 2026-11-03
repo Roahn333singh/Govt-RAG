@@ -1,0 +1,14 @@
+{
+  "git_sha": null,
+  "updated": null,
+  "retrieval": {
+    "recall_at_8": null
+  },
+  "answer": {
+    "faithfulness": null,
+    "false_refusal_rate": null,
+    "correct_refusal_rate": null,
+    "latency_p95_s": null,
+    "error_rate": null
+  }
+}

@@ -33,6 +33,12 @@ Icon
 *.swo
 *~
 
+# Eval artifacts (reports and the judge cache). baseline.json stays tracked.
+eval/results/
+eval/judge_cache.jsonl
+eval/.history.lock
+eval/history.csv.tmp
+
 # Data directories (large binary files, not needed to run the app)
 data/
 extra_data/

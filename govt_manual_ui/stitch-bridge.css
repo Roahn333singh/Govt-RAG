@@ -59,7 +59,7 @@
   place-items: center;
   background: #04122e;
   color: #fff9ec;
-  font-family: "Noto Serif", serif;
+  font-family: Geist, "Noto Sans Devanagari", system-ui, sans-serif;
   font-weight: 700;
   font-size: 0.75rem;
 }
@@ -87,7 +87,7 @@
 .memo-card__body h1,
 .memo-card__body h2,
 .memo-card__body h3 {
-  font-family: "Noto Serif", serif;
+  font-family: Geist, "Noto Sans Devanagari", system-ui, sans-serif;
   margin: 0.65em 0 0.3em;
 }
 
@@ -196,7 +196,7 @@
 }
 
 .cite-card__title {
-  font-family: "Noto Serif", serif;
+  font-family: Geist, "Noto Sans Devanagari", system-ui, sans-serif;
   font-size: 1rem;
   margin: 0.45rem 0 0.3rem;
   color: #04122e;
