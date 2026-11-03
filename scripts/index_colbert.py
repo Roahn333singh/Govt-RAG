@@ -8,7 +8,7 @@ collection.
 
 Usage:
   uv run python scripts/index_colbert.py
-  uv run python scripts/index_colbert.py --source my-collection --dest my-collection-colbert
+  uv run python scripts/index_colbert.py --source my-collection --dest my-collection-colbert --batch 2
   uv run python scripts/index_colbert.py --resume   # skip points that already have colbert
 """
 
@@ -50,6 +50,21 @@ DENSE_NAME = "abstract-dense-vector"
 SPARSE_NAME = "sparse-vector"
 DEFAULT_SOURCE = "my-collection"
 DEFAULT_DEST = "my-collection-colbert"
+# jina-colbert-v2 advertises 8192 context; leaving that on makes ONNX allocate
+# huge Einsum workspaces (tens of GiB) and stalls the first batch for a long time.
+# Passage ColBERT practice is a few hundred tokens; 512 covers our ~900-char chunks.
+DOC_MAX_TOKENS = 512
+
+
+def _log(msg: str) -> None:
+    print(msg, flush=True)
+
+
+def _cap_doc_tokenizer(encoder, max_tokens: int = DOC_MAX_TOKENS) -> None:
+    tok = getattr(getattr(encoder, "model", None), "tokenizer", None)
+    if tok is not None and hasattr(tok, "enable_truncation"):
+        tok.enable_truncation(max_length=max_tokens)
+        _log(f"document tokenizer truncated to {max_tokens} tokens")
 
 
 def _rss_bytes() -> int:
@@ -81,11 +96,11 @@ def _sparse_payload(vec) -> SparseVector | None:
 
 def ensure_dest(client: QdrantClient, source: str, dest: str) -> None:
     if client.collection_exists(dest):
-        print(f"dest collection exists: {dest}")
+        _log(f"dest collection exists: {dest}")
         return
     if not client.collection_exists(source):
         raise SystemExit(f"source collection missing: {source}")
-    print(f"creating {dest} from {source} schema + colbert multivector...")
+    _log(f"creating {dest} from {source} schema + colbert multivector...")
     client.create_collection(
         collection_name=dest,
         vectors_config={
@@ -147,9 +162,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default=os.getenv("COLBERT_SOURCE", DEFAULT_SOURCE))
     parser.add_argument("--dest", default=os.getenv("COLBERT_COLLECTION", DEFAULT_DEST))
-    parser.add_argument("--batch", type=int, default=16, help="Points encoded per upsert")
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=2,
+        help="Points encoded per upsert (keep small on CPU; default 2)",
+    )
     parser.add_argument("--resume", action="store_true", help="Skip points that already have colbert")
     parser.add_argument("--limit", type=int, default=None, help="Encode at most N new points")
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DOC_MAX_TOKENS,
+        help="Truncate each document to this many tokenizer tokens before encode",
+    )
     args = parser.parse_args()
 
     if args.dest == args.source or args.dest == DEFAULT_SOURCE:
@@ -168,17 +194,20 @@ def main() -> None:
 
     from fastembed import LateInteractionTextEmbedding
 
-    print(f"loading {COLBERT_MODEL}...")
-    encoder = LateInteractionTextEmbedding(COLBERT_MODEL)
-    # Warm document path once.
-    next(encoder.embed(["warmup document"]))
+    threads = int(os.getenv("ONNXRUNTIME_INTRA_OP_NUM_THREADS") or os.getenv("OMP_NUM_THREADS") or "2")
+    _log(f"loading {COLBERT_MODEL} (threads={threads})...")
+    encoder = LateInteractionTextEmbedding(COLBERT_MODEL, threads=threads)
+    _cap_doc_tokenizer(encoder, args.max_tokens)
+    _log("warming document encoder (one short string)...")
+    next(encoder.embed(["warmup document"], batch_size=1))
+    _log("warmup done")
 
     skip = already_indexed(client, args.dest) if args.resume else set()
     if skip:
-        print(f"resume: {len(skip)} points already have {COLBERT_VECTOR_NAME}")
+        _log(f"resume: {len(skip)} points already have {COLBERT_VECTOR_NAME}")
 
     source_count = client.count(collection_name=args.source, exact=True).count
-    print(f"source points={source_count} dest={args.dest} batch={args.batch}")
+    _log(f"source points={source_count} dest={args.dest} batch={args.batch}")
 
     started = time.perf_counter()
     offset = None
@@ -206,7 +235,10 @@ def main() -> None:
             texts.append(text)
             batch.append(point)
         if batch:
-            matrices = list(encoder.embed(texts))
+            _log(f"encoding batch size={len(batch)} seen={seen}/{source_count}...")
+            encode_started = time.perf_counter()
+            matrices = list(encoder.embed(texts, batch_size=len(texts)))
+            encode_ms = (time.perf_counter() - encode_started) * 1000
             upserts = []
             for point, matrix in zip(batch, matrices):
                 vectors = point.vector or {}
@@ -225,12 +257,13 @@ def main() -> None:
             written += len(upserts)
             elapsed = time.perf_counter() - started
             rate = written / elapsed if elapsed else 0.0
-            print(
+            _log(
                 f"progress written={written} skipped={skipped} seen={seen}/{source_count} "
-                f"{rate:.2f} pts/s rss_mib={_rss_bytes() / 1024 / 1024:.1f}"
+                f"encode_ms={encode_ms:.0f} {rate:.2f} pts/s "
+                f"rss_mib={_rss_bytes() / 1024 / 1024:.1f}"
             )
             if args.limit is not None and written >= args.limit:
-                print(f"hit --limit {args.limit}")
+                _log(f"hit --limit {args.limit}")
                 break
         if offset is None:
             break
@@ -238,12 +271,12 @@ def main() -> None:
     elapsed = time.perf_counter() - started
     dest_info = client.get_collection(args.dest)
     dest_count = dest_info.points_count
-    print(
+    _log(
         f"done source={args.source} dest={args.dest} written={written} skipped={skipped} "
         f"dest_points={dest_count} elapsed_s={elapsed:.1f} "
         f"peak_rss_mib={_rss_bytes() / 1024 / 1024:.1f}"
     )
-    print(
+    _log(
         "Qdrant Cloud does not expose per-collection disk/RAM in the public API; "
         "use the cluster dashboard for on-disk / RAM size of "
         f"{args.dest}."

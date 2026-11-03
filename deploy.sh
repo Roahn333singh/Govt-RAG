@@ -65,6 +65,8 @@ DOC_VERSION: "2026-10-27"
 GIT_SHA: "$(git rev-parse --short HEAD)"
 OTEL_ENABLED: "true"
 OTEL_SAMPLE_RATE: "1.0"
+LANGSMITH_TRACING: "true"
+LANGSMITH_PROJECT: "govt-rag"
 # Testing only. Delete these lines to restore the code defaults of 15/minute and 100/day.
 CHAT_RATE_MINUTE: "2000/minute"
 CHAT_RATE_DAY: "1000000/day"
@@ -97,7 +99,7 @@ if gcloud secrets describe rag-qa-api-key --project="${PROJECT_ID}" >/dev/null 2
 else
   echo "WARN: secret rag-qa-api-key not found — QA key not mounted"
 fi
-for s in RATE_LIMIT_STORAGE_URI; do
+for s in RATE_LIMIT_STORAGE_URI LANGSMITH_API_KEY; do
   if gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
     SECRETS="${SECRETS},${s}=${s}:latest"
   else

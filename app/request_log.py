@@ -44,6 +44,7 @@ def install_request_logging(app) -> None:
         with _lock:
             _in_flight += 1
         request_id = uuid.uuid4().hex
+        request.state.request_id = request_id
         token = begin_request_fields()
         started = time.perf_counter()
         status = 500

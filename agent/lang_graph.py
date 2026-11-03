@@ -55,8 +55,10 @@ def get_llm(temperature=0.7):
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is required for chat generation")
 
+        model = os.getenv("OPENROUTER_LLM_MODEL", _DEFAULT_LLM)
+        # Metadata lets LangSmith map tokens → $ for OpenRouter custom model ids.
         _llm_cache[temperature] = ChatOpenAI(
-            model=os.getenv("OPENROUTER_LLM_MODEL", _DEFAULT_LLM),
+            model=model,
             api_key=api_key,
             base_url=_OPENROUTER_BASE,
             temperature=temperature,
@@ -64,6 +66,17 @@ def get_llm(temperature=0.7):
             timeout=45,
             max_retries=2,
             streaming=True,
+            default_headers={
+                "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER")
+                or "https://manual-ai-rag.local",
+                "X-Title": os.getenv("OPENROUTER_APP_TITLE") or "govt-rag",
+            },
+        ).with_config(
+            tags=["openrouter", "llm"],
+            metadata={
+                "ls_provider": "openrouter",
+                "ls_model_name": model,
+            },
         )
     return _llm_cache[temperature]
 
@@ -127,7 +140,7 @@ HI: एफएमआईएससी बाढ़ निगरानी पोर�
                     get_llm(temperature=0.0).ainvoke(prompt),
                     timeout=REWRITER_TIMEOUT_SECONDS,
                 )
-                annotate_llm(llm_span, response, _llm_model())
+                annotate_llm(llm_span, response, _llm_model(), role="rewriter")
             except Exception as exc:
                 llm_span.record_exception(exc)
                 llm_span.set_status(Status(StatusCode.ERROR))
@@ -255,7 +268,7 @@ Answer:"""
         llm_span.set_attribute("model", _llm_model())
         try:
             response = await get_llm(temperature=0.1).ainvoke(prompt)
-            annotate_llm(llm_span, response, _llm_model())
+            annotate_llm(llm_span, response, _llm_model(), role="generator")
         except Exception as exc:
             llm_span.record_exception(exc)
             llm_span.set_status(Status(StatusCode.ERROR))

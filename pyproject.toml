@@ -26,6 +26,7 @@ dependencies = [
     "pytesseract>=0.3.13",
     "openai>=3.37.0",
     "langchain-openai>=1.7.2",
+    "langsmith>=0.3.0",
     "redis>=8.1.0",
     "cachetools>=7.2.6",
     "httpx>=0.28.1",

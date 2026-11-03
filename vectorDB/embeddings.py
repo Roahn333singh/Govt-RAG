@@ -75,6 +75,24 @@ class OpenRouterEmbeddings:
 
     # ── Internal request with retry ──────────────────────────────────────
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        from app.langsmith_tracing import record_embedding_usage, traceable_if_available
+
+        @traceable_if_available(
+            name="openrouter.embed",
+            run_type="embedding",
+            metadata={
+                "ls_provider": "openrouter",
+                "ls_model_name": self.model,
+            },
+        )
+        def _run(batch: list[str]) -> list[list[float]]:
+            return self._embed_batch_inner(batch)
+
+        return _run(texts)
+
+    def _embed_batch_inner(self, texts: list[str]) -> list[list[float]]:
+        from app.langsmith_tracing import record_embedding_usage
+
         payload = {
             "model": self.model,
             "input": texts,
@@ -92,9 +110,22 @@ class OpenRouterEmbeddings:
                         response.raise_for_status()
                         data = response.json()
                         usage = data.get("usage") or {}
-                        span.set_attribute("prompt_tokens", int(usage.get("prompt_tokens") or 0))
+                        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                        span.set_attribute("prompt_tokens", prompt_tokens)
                         span.set_attribute(
                             "completion_tokens", int(usage.get("completion_tokens") or 0)
+                        )
+                        cost = usage.get("cost")
+                        try:
+                            total_cost = float(cost) if cost is not None else None
+                        except (TypeError, ValueError):
+                            total_cost = None
+                        if total_cost is not None:
+                            span.set_attribute("total_cost_usd", total_cost)
+                        record_embedding_usage(
+                            model=self.model,
+                            prompt_tokens=prompt_tokens,
+                            total_cost=total_cost,
                         )
                     except Exception as exc:
                         span.record_exception(exc)

@@ -186,6 +186,24 @@ def run_hybrid_search(
     Cross-encoder rerank is a separate once-per-request step. Pass dense_vector
     to reuse an embedding already computed for the cache lookup.
     """
+    from app.langsmith_tracing import traceable_if_available
+
+    @traceable_if_available(
+        name="qdrant.hybrid_search",
+        run_type="retriever",
+        metadata={"collection": COLLECTION_NAME},
+    )
+    def _run(q: str, lim: int, vector):
+        return _run_hybrid_search_inner(q, lim, vector)
+
+    return _run(question, limit, dense_vector)
+
+
+def _run_hybrid_search_inner(
+    question: str,
+    limit: int,
+    dense_vector: list[float] | None,
+):
     print(f"\nQuerying: '{question[:80]}'...")
 
     if dense_vector is not None:
@@ -246,6 +264,20 @@ def run_hybrid_search(
 
 def rerank_hits(question: str, candidates: list, top_k: int):
     """Score one fused pool. Documents are truncated before the cross-encoder."""
+    from app.langsmith_tracing import traceable_if_available
+
+    @traceable_if_available(
+        name="rerank",
+        run_type="chain",
+        metadata={"reranker": getattr(reranker, "name", None)},
+    )
+    def _run(q: str, docs: list, k: int):
+        return _rerank_hits_inner(q, docs, k)
+
+    return _run(question, candidates, top_k)
+
+
+def _rerank_hits_inner(question: str, candidates: list, top_k: int):
     if not candidates:
         return []
     if reranker is None:

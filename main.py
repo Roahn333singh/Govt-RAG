@@ -14,12 +14,13 @@ from typing import Annotated
 if sys.platform == "darwin":
     urllib.request.getproxies = lambda: {}
 
-os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
-os.environ.setdefault("LANGSMITH_TRACING", "false")
-
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
+
+from app.langsmith_tracing import chat_tracing, setup_langsmith
+
+setup_langsmith()
 
 from cachetools import TTLCache
 from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
@@ -523,9 +524,21 @@ async def users_chat(
                     span.set_attribute("cache.hit", True)
                     span.set_attribute("cache.score", 1.0)
                 note_cache(True)
-                return _chat_response(
-                    remembered["answer"], remembered["sources"], session_id, True, request
-                )
+                with chat_tracing(
+                    session_id=session_id,
+                    language=user_lang,
+                    request_id=getattr(request.state, "request_id", None),
+                    cached=True,
+                    stream=False,
+                    extra_tags=["exact_cache"],
+                ):
+                    return _chat_response(
+                        remembered["answer"],
+                        remembered["sources"],
+                        session_id,
+                        True,
+                        request,
+                    )
             query_vector = await _embed_question(message)
 
             cached = await _lookup_cache(message, user_lang, query_vector)
@@ -534,28 +547,43 @@ async def users_chat(
                 if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
                     return _chat_response(INJECTION_REFUSAL, [], session_id, False, request)
                 answer = filter_output(raw, message) or REFUSAL_TEXT
-                return _chat_response(
-                    answer,
-                    cached.get("sources") or [],
-                    session_id,
-                    True,
-                    request,
-                )
+                with chat_tracing(
+                    session_id=session_id,
+                    language=user_lang,
+                    request_id=getattr(request.state, "request_id", None),
+                    cached=True,
+                    stream=False,
+                    extra_tags=["semantic_cache"],
+                ):
+                    return _chat_response(
+                        answer,
+                        cached.get("sources") or [],
+                        session_id,
+                        True,
+                        request,
+                    )
 
             print("Asking processor to think...")
             graph = get_compile_all()()
-            config = {"configurable": {"thread_id": session_id}}
-            async with _llm_slots:
-                result = await graph.ainvoke(
-                    {
-                        "messages": [{"role": "user", "content": message}],
-                        "session_id": session_id,
-                        "answer_language": user_lang,
-                        "query_vector": query_vector,
-                        "sources": [],
-                    },
-                    config,
-                )
+            request_id = getattr(request.state, "request_id", None)
+            with chat_tracing(
+                session_id=session_id,
+                language=user_lang,
+                request_id=request_id,
+                cached=False,
+                stream=False,
+            ) as config:
+                async with _llm_slots:
+                    result = await graph.ainvoke(
+                        {
+                            "messages": [{"role": "user", "content": message}],
+                            "session_id": session_id,
+                            "answer_language": user_lang,
+                            "query_vector": query_vector,
+                            "sources": [],
+                        },
+                        config,
+                    )
             final_answer = result["messages"][-1].content
             sources = result.get("sources") or []
 
@@ -660,46 +688,53 @@ async def users_chat_stream(
             return StreamingResponse(cached_stream(), media_type="text/event-stream")
 
         graph = get_compile_all()()
-        config = {"configurable": {"thread_id": session_id}}
+        request_id = getattr(request.state, "request_id", None)
 
         async def generate_and_save_stream():
             final_answer = ""
             sources: list = []
             try:
                 async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
-                    async with _llm_slots:
-                        async for event in graph.astream_events(
-                            {
-                                "messages": [{"role": "user", "content": message}],
-                                "session_id": session_id,
-                                "answer_language": user_lang,
-                                "query_vector": query_vector,
-                                "sources": [],
-                            },
-                            config,
-                            version="v2",
-                        ):
-                            kind = event.get("event")
-                            if kind == "on_chat_model_stream":
-                                meta = event.get("metadata") or {}
-                                node = meta.get("langgraph_node")
-                                if node and node != "generator":
-                                    continue
-                                chunk = event.get("data", {}).get("chunk")
-                                content = getattr(chunk, "content", None) if chunk else None
-                                if isinstance(content, list):
-                                    content = "".join(
-                                        part.get("text", "")
-                                        for part in content
-                                        if isinstance(part, dict)
-                                    )
-                                if content:
-                                    yield _sse({"type": "token", "text": content})
-                                    final_answer += content
-                            elif kind == "on_chain_end":
-                                output = (event.get("data") or {}).get("output") or {}
-                                if isinstance(output, dict) and output.get("sources"):
-                                    sources = output["sources"]
+                    with chat_tracing(
+                        session_id=session_id,
+                        language=user_lang,
+                        request_id=request_id,
+                        cached=False,
+                        stream=True,
+                    ) as config:
+                        async with _llm_slots:
+                            async for event in graph.astream_events(
+                                {
+                                    "messages": [{"role": "user", "content": message}],
+                                    "session_id": session_id,
+                                    "answer_language": user_lang,
+                                    "query_vector": query_vector,
+                                    "sources": [],
+                                },
+                                config,
+                                version="v2",
+                            ):
+                                kind = event.get("event")
+                                if kind == "on_chat_model_stream":
+                                    meta = event.get("metadata") or {}
+                                    node = meta.get("langgraph_node")
+                                    if node and node != "generator":
+                                        continue
+                                    chunk = event.get("data", {}).get("chunk")
+                                    content = getattr(chunk, "content", None) if chunk else None
+                                    if isinstance(content, list):
+                                        content = "".join(
+                                            part.get("text", "")
+                                            for part in content
+                                            if isinstance(part, dict)
+                                        )
+                                    if content:
+                                        yield _sse({"type": "token", "text": content})
+                                        final_answer += content
+                                elif kind == "on_chain_end":
+                                    output = (event.get("data") or {}).get("output") or {}
+                                    if isinstance(output, dict) and output.get("sources"):
+                                        sources = output["sources"]
 
                 filtered = filter_output(final_answer, message)
                 if filtered and filtered != final_answer:
