@@ -44,6 +44,7 @@ def install_request_logging(app) -> None:
         with _lock:
             _in_flight += 1
         request_id = uuid.uuid4().hex
+        request.state.request_id = request_id
         token = begin_request_fields()
         started = time.perf_counter()
         status = 500
@@ -83,6 +84,8 @@ def install_request_logging(app) -> None:
                 "qdrant_ms": timings.get("qdrant_ms", 0),
                 "rerank_ms": timings.get("rerank_ms", 0),
                 "generate_ms": timings.get("generate_ms", 0),
+                "llm_first_token_ms": timings.get("llm_first_token_ms", 0),
+                "llm_total_ms": timings.get("llm_total_ms", 0),
                 "key_id": getattr(request.state, "key_id", None),
             }
             span_ctx = trace.get_current_span().get_span_context()

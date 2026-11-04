@@ -33,3 +33,5 @@ nivida_evaluation_qa.md
 chunked_docs_inventory.csv
 .dockerignore
 deploy.sh
+govt_manual_ui/palette-preview.html
+govt_manual_ui/assets/logo-options/

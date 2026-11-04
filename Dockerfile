@@ -1,4 +1,33 @@
 # Manual AI RAG — Cloud Run image
+# Model weights are baked in a throwaway stage so torch/optimum never ship.
+FROM python:3.12-slim AS modelbake
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PATH="/app/.venv/bin:$PATH" \
+    FASTEMBED_CACHE_PATH=/app/models \
+    HF_HOME=/tmp/hf \
+    OMP_NUM_THREADS=2 \
+    ONNXRUNTIME_INTRA_OP_NUM_THREADS=2
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --upgrade pip uv
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY scripts/bake_models.py scripts/bake_onnx_rerankers.py /tmp/
+RUN mkdir -p /app/models && python /tmp/bake_models.py
+# optimum+torch live in /tmp/opt and are not copied into the runtime image
+RUN uv pip install --python /app/.venv/bin/python --target /tmp/opt 'optimum[onnxruntime]' sentencepiece
+ENV PYTHONPATH=/tmp/opt
+RUN python /tmp/bake_onnx_rerankers.py
+
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,15 +48,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --upgrade pip uv
 
-# Install deps first (better layer cache)
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Bake BM25 + MiniLM into the image so cold starts never download models
-COPY scripts/bake_models.py /tmp/bake_models.py
-RUN mkdir -p /app/models && .venv/bin/python /tmp/bake_models.py && rm /tmp/bake_models.py
+COPY --from=modelbake /app/models /app/models
 
-# App code
 COPY agent ./agent
 COPY app ./app
 COPY vectorDB ./vectorDB

@@ -112,9 +112,20 @@ class FakeGraph:
         return {"messages": [AIMessage(content=self.answer)], "sources": self.sources}
 
     async def astream_events(self, state, config=None, version="v2"):
+        import asyncio
+
         from langchain_core.messages import AIMessageChunk
 
         self.calls += 1
+        if self.delay:
+            await asyncio.sleep(self.delay)
+        for node in ("query_rewriter", "retriever", "generator"):
+            yield {
+                "event": "on_chain_start",
+                "name": node,
+                "metadata": {"langgraph_node": node},
+                "data": {},
+            }
         words = self.answer.split(" ")
         for i, w in enumerate(words):
             yield {
@@ -125,6 +136,7 @@ class FakeGraph:
         yield {
             "event": "on_chain_end",
             "name": "generator",
+            "metadata": {"langgraph_node": "generator"},
             "data": {"output": {"sources": self.sources}},
         }
 

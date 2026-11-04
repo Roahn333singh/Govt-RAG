@@ -1,0 +1,141 @@
+name: eval
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - eval/history.csv
+  workflow_dispatch:
+    inputs:
+      revision_url:
+        description: Tagged no-traffic Cloud Run revision URL
+        required: true
+        type: string
+      max_cost:
+        description: Judge spend cap in USD
+        required: false
+        default: "0.30"
+        type: string
+  workflow_call:
+    inputs:
+      revision_url:
+        description: Tagged no-traffic Cloud Run revision URL
+        required: true
+        type: string
+      max_cost:
+        description: Judge spend cap in USD
+        required: false
+        default: "0.30"
+        type: string
+    secrets:
+      CLUSTER_ENDPOINT:
+        required: true
+      QDRANT_API_KEY:
+        required: true
+      OPENROUTER_API_KEY:
+        required: true
+      RAG_EVAL_API_KEY:
+        required: true
+      RAG_EVAL_ADMIN_TOKEN:
+        required: false
+      GCP_WORKLOAD_IDENTITY_PROVIDER:
+        required: false
+      GCP_EVAL_UPLOAD_SA:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  pull-request:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev
+      - name: Retrieval on the full set, answers on sample25
+        env:
+          CLUSTER_ENDPOINT: ${{ secrets.CLUSTER_ENDPOINT }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RAG_EVAL_API_KEY: ${{ secrets.RAG_EVAL_API_KEY }}
+          RAG_EVAL_ADMIN_TOKEN: ${{ secrets.RAG_EVAL_ADMIN_TOKEN }}
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+        run: uv run python eval/run_eval.py --retrieval-set full --answer-set sample25 --url "$EVAL_BASE_URL" --gate --no-upload --out eval/results/ci
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-pr
+          path: eval/results/ci
+      - uses: peter-evans/create-or-update-comment@v4
+        if: always() && hashFiles('eval/results/ci/report.md') != ''
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: eval/results/ci/report.md
+          edit-mode: replace
+          comment-tag: eval-report
+
+  push-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev
+      - uses: google-github-actions/auth@v2
+        continue-on-error: true
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_EVAL_UPLOAD_SA }}
+      - name: Retrieval on the full set, answers on sample25
+        env:
+          CLUSTER_ENDPOINT: ${{ secrets.CLUSTER_ENDPOINT }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RAG_EVAL_API_KEY: ${{ secrets.RAG_EVAL_API_KEY }}
+          RAG_EVAL_ADMIN_TOKEN: ${{ secrets.RAG_EVAL_ADMIN_TOKEN }}
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+        run: uv run python eval/run_eval.py --retrieval-set full --answer-set sample25 --url "$EVAL_BASE_URL" --gate --out eval/results/main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-main
+          path: |
+            eval/results/main
+            eval/history.csv
+
+  full:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev
+      - uses: google-github-actions/auth@v2
+        continue-on-error: true
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_EVAL_UPLOAD_SA }}
+      - name: Full retrieval and answer eval against the tagged revision
+        env:
+          CLUSTER_ENDPOINT: ${{ secrets.CLUSTER_ENDPOINT }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RAG_EVAL_API_KEY: ${{ secrets.RAG_EVAL_API_KEY }}
+          RAG_EVAL_ADMIN_TOKEN: ${{ secrets.RAG_EVAL_ADMIN_TOKEN }}
+          RERANKER_MODEL: Xenova/ms-marco-MiniLM-L-6-v2
+        run: uv run python eval/run_eval.py --set full --url "${{ inputs.revision_url }}" --max-cost "${{ inputs.max_cost }}" --gate --out eval/results/full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-full
+          path: eval/results/full

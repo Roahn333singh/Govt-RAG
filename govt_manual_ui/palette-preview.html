@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en" data-palette="forest" data-theme="light">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Manual AI UP · Full UI colour variants</title>
+<style>
+/* ── Palette tokens: light + dark for each direction ── */
+html[data-palette="forest"][data-theme="light"] {
+  --background:#f5f7f6; --foreground:#14231b; --card:#ffffff; --card-foreground:#0b1611;
+  --primary:#1a6b45; --primary-foreground:#f4faf6; --muted:#eef2ef; --muted-foreground:#5f7167;
+  --accent:#e6f4ec; --accent-foreground:#134f33; --border:#dce6df; --bubble:#e8eeea;
+  --link:#0b5cab; --ring:#2d9a60; --primary-mid:#2d9a60; --primary-pale:#b7dccc;
+}
+html[data-palette="forest"][data-theme="dark"] {
+  --background:#0d1310; --foreground:#e8f0eb; --card:#121a16; --card-foreground:#f4faf6;
+  --primary:#3dcf84; --primary-foreground:#062214; --muted:#162019; --muted-foreground:#a7b8ae;
+  --accent:#1a3024; --accent-foreground:#45d98d; --border:#2a3a31; --bubble:#24332b;
+  --link:#7ec2ff; --ring:#45d98d; --primary-mid:#45d98d; --primary-pale:#2a4a38;
+}
+
+html[data-palette="navy"][data-theme="light"] {
+  --background:#f4f6f9; --foreground:#152033; --card:#ffffff; --card-foreground:#0f172a;
+  --primary:#1e3a5f; --primary-foreground:#f5f8fc; --muted:#e8eef5; --muted-foreground:#5c6b7a;
+  --accent:#e8eef5; --accent-foreground:#1e3a5f; --border:#d5dde6; --bubble:#e7ecf2;
+  --link:#0b5cab; --ring:#3b82c4; --primary-mid:#2f5a8c; --primary-pale:#b6c9de;
+}
+html[data-palette="navy"][data-theme="dark"] {
+  --background:#0b1220; --foreground:#e8eef7; --card:#121a2a; --card-foreground:#f1f5fb;
+  --primary:#7eb0e6; --primary-foreground:#0b1220; --muted:#182033; --muted-foreground:#9aabc0;
+  --accent:#1a2740; --accent-foreground:#9ec5f0; --border:#24324a; --bubble:#1c2740;
+  --link:#8ec8ff; --ring:#7eb0e6; --primary-mid:#7eb0e6; --primary-pale:#2a3f5c;
+}
+
+html[data-palette="teal"][data-theme="light"] {
+  --background:#f3f8f7; --foreground:#122826; --card:#ffffff; --card-foreground:#0f1f1d;
+  --primary:#0f766e; --primary-foreground:#f0fdfa; --muted:#e6f2f0; --muted-foreground:#5a6f6c;
+  --accent:#dff5f1; --accent-foreground:#115e59; --border:#d2e2df; --bubble:#e4efed;
+  --link:#0e7490; --ring:#14b8a6; --primary-mid:#14b8a6; --primary-pale:#99d9d1;
+}
+html[data-palette="teal"][data-theme="dark"] {
+  --background:#0a1413; --foreground:#e6f4f1; --card:#101c1a; --card-foreground:#f0faf8;
+  --primary:#2dd4bf; --primary-foreground:#042f2e; --muted:#152422; --muted-foreground:#95b3ad;
+  --accent:#163530; --accent-foreground:#5eead4; --border:#23403b; --bubble:#1a302c;
+  --link:#67e8f9; --ring:#2dd4bf; --primary-mid:#2dd4bf; --primary-pale:#1f4a44;
+}
+
+html[data-palette="ink"][data-theme="light"] {
+  --background:#f7f5f1; --foreground:#1c1917; --card:#fffcf7; --card-foreground:#1c1917;
+  --primary:#1f4d3a; --primary-foreground:#f7faf8; --muted:#efeae2; --muted-foreground:#6b635a;
+  --accent:#e8f0ea; --accent-foreground:#1f4d3a; --border:#e4ddd2; --bubble:#ebe6dc;
+  --link:#1d4e89; --ring:#3d7a5f; --primary-mid:#3d7a5f; --primary-pale:#b7cfc2;
+}
+html[data-palette="ink"][data-theme="dark"] {
+  --background:#12100e; --foreground:#f0ebe3; --card:#1a1714; --card-foreground:#f7f3ec;
+  --primary:#6fc29a; --primary-foreground:#0c1a14; --muted:#221e1a; --muted-foreground:#b0a79b;
+  --accent:#24352c; --accent-foreground:#8fd4b0; --border:#322c26; --bubble:#2a2520;
+  --link:#93c5fd; --ring:#6fc29a; --primary-mid:#6fc29a; --primary-pale:#2f4a3c;
+}
+
+html[data-palette="saffron"][data-theme="light"] {
+  --background:#faf7f2; --foreground:#1f1a14; --card:#ffffff; --card-foreground:#1c1410;
+  --primary:#9a3412; --primary-foreground:#fff7ed; --muted:#f3ebe1; --muted-foreground:#6f6256;
+  --accent:#ffedd5; --accent-foreground:#9a3412; --border:#e8dfd3; --bubble:#f0e9df;
+  --link:#1d4ed8; --ring:#c2410c; --primary-mid:#c2410c; --primary-pale:#fdba74;
+}
+html[data-palette="saffron"][data-theme="dark"] {
+  --background:#140f0c; --foreground:#f6efe6; --card:#1c1612; --card-foreground:#faf4ec;
+  --primary:#fb923c; --primary-foreground:#1c0a04; --muted:#261e18; --muted-foreground:#b9a99a;
+  --accent:#3a2416; --accent-foreground:#fdba74; --border:#3a2e24; --bubble:#2a211a;
+  --link:#93c5fd; --ring:#fb923c; --primary-mid:#fb923c; --primary-pale:#5a3418;
+}
+
+html[data-palette="slate"][data-theme="light"] {
+  --background:#f5f5f6; --foreground:#18181b; --card:#ffffff; --card-foreground:#09090b;
+  --primary:#3f3f46; --primary-foreground:#fafafa; --muted:#f4f4f5; --muted-foreground:#71717a;
+  --accent:#f4f4f5; --accent-foreground:#27272a; --border:#e4e4e7; --bubble:#e4e4e7;
+  --link:#2563eb; --ring:#71717a; --primary-mid:#52525b; --primary-pale:#d4d4d8;
+}
+html[data-palette="slate"][data-theme="dark"] {
+  --background:#09090b; --foreground:#f4f4f5; --card:#18181b; --card-foreground:#fafafa;
+  --primary:#a1a1aa; --primary-foreground:#18181b; --muted:#27272a; --muted-foreground:#a1a1aa;
+  --accent:#27272a; --accent-foreground:#e4e4e7; --border:#3f3f46; --bubble:#27272a;
+  --link:#60a5fa; --ring:#a1a1aa; --primary-mid:#a1a1aa; --primary-pale:#3f3f46;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", "Noto Sans Devanagari", sans-serif;
+  color: var(--foreground);
+  background: var(--background);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Control bar */
+.chooser {
+  position: fixed; inset: 0 0 auto 0; z-index: 50;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.65rem;
+  padding: 0.55rem 0.85rem;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+.chooser strong { font-size: 0.78rem; margin-right: 0.25rem; }
+.chooser button {
+  font: inherit; font-size: 0.72rem; font-weight: 650;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+  border-radius: 999px; padding: 0.32rem 0.7rem; cursor: pointer;
+}
+.chooser button.is-on {
+  background: var(--accent); color: var(--accent-foreground); border-color: var(--primary-pale);
+}
+.chooser .sep { width: 1px; height: 1.2rem; background: var(--border); margin: 0 0.15rem; }
+.chooser .hint { font-size: 0.7rem; color: var(--muted-foreground); margin-left: auto; }
+
+.app {
+  height: 100%;
+  padding-top: 3.1rem;
+  display: flex;
+  overflow: hidden;
+}
+
+.ico { width: 1.1rem; height: 1.1rem; display: inline-block; flex: none; }
+.ico--sm { width: 0.85rem; height: 0.85rem; }
+
+.btn {
+  font: inherit; font-size: 0.84rem; font-weight: 600; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+  height: 2.25rem; padding: 0 0.8rem; border-radius: 10px;
+  border: 1px solid transparent; cursor: pointer;
+}
+.btn-outline { background: var(--card); color: var(--foreground); border-color: var(--border); }
+.btn-ghost { background: transparent; color: var(--foreground); }
+.btn-icon { width: 2.25rem; padding: 0; }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+
+.sidebar {
+  width: 292px; flex: none;
+  background: var(--card); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.sidebar__brand {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  padding: 1rem; border-bottom: 1px solid var(--border);
+}
+.brand-logo {
+  width: 2.7rem; height: 2.7rem; border-radius: 999px; object-fit: cover; flex: none;
+  background: var(--muted);
+}
+.brand-text { min-width: 0; flex: 1; }
+.brand-text strong {
+  display: block; color: var(--primary); font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em;
+}
+.brand-text span { display: block; color: var(--muted-foreground); font-size: 0.7rem; line-height: 1.35; margin-top: 0.15rem; }
+
+.sidebar__menu { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.8rem 0.7rem 0.35rem; }
+.menu-item {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%;
+  border: 0; background: transparent; color: var(--foreground);
+  font: inherit; font-size: 0.88rem; font-weight: 600; text-align: left;
+  padding: 0.65rem 0.75rem; border-radius: 10px; cursor: default;
+}
+.menu-item.is-active { background: var(--accent); color: var(--accent-foreground); }
+
+.sidebar__suggest {
+  flex: 1; min-height: 0; overflow: auto; padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border); margin-top: 0.3rem;
+}
+.sidebar__label {
+  margin: 0.45rem 0.3rem 0.35rem; font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground);
+}
+.suggest-btn {
+  display: flex; align-items: flex-start; gap: 0.5rem; width: 100%;
+  border: 0; background: transparent; color: var(--foreground);
+  font: inherit; font-size: 0.82rem; line-height: 1.4; text-align: left;
+  padding: 0.5rem; border-radius: 8px; cursor: default;
+}
+.suggest-btn:hover { background: var(--accent); }
+.suggest-mark { color: var(--primary-mid); margin-top: 0.35rem; width: 0.4rem; height: 0.4rem; }
+
+.sidebar__foot {
+  margin: 0; padding: 0.8rem 1rem; border-top: 1px solid var(--border);
+  color: var(--muted-foreground); font-size: 0.7rem; line-height: 1.4;
+  display: flex; gap: 0.4rem; align-items: flex-start;
+}
+
+.main {
+  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  background:
+    radial-gradient(900px 420px at 80% -5%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 55%),
+    var(--background);
+}
+.topbar {
+  flex: none; display: flex; align-items: flex-start; gap: 0.7rem;
+  padding: 1rem 1.25rem 0.9rem; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter: blur(10px);
+}
+.topbar__greeting { flex: 1; min-width: 0; }
+.topbar__greeting h1 {
+  margin: 0; color: var(--card-foreground); font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em;
+}
+.topbar__greeting p { margin: 0.25rem 0 0; color: var(--muted-foreground); font-size: 0.86rem; }
+.topbar__actions { display: flex; gap: 0.35rem; align-items: center; }
+.lang-toggle { color: var(--muted-foreground); font-size: 0.72rem; font-weight: 700; }
+.lang-toggle .on { color: var(--primary); }
+
+.thread { flex: 1; min-height: 0; overflow: auto; padding: 1.15rem 1.25rem 1.4rem; }
+.msg { max-width: 52rem; margin: 0 auto 1.1rem; display: flex; gap: 0.7rem; }
+.msg--user { justify-content: flex-end; }
+.msg__avatar {
+  width: 2.1rem; height: 2.1rem; border-radius: 999px; object-fit: cover; flex: none; margin-top: 0.15rem;
+}
+.msg__bubble {
+  max-width: min(100%, 34rem); background: var(--bubble); color: var(--card-foreground);
+  border-radius: 16px 16px 6px 16px; padding: 0.75rem 0.95rem; font-size: 0.92rem; line-height: 1.5;
+}
+.msg__meta { text-align: right; font-size: 0.66rem; color: var(--muted-foreground); margin-top: 0.2rem; }
+.msg__card { flex: 1; min-width: 0; max-width: 44rem; }
+.msg__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.4rem; }
+.msg__name { font-weight: 700; font-size: 0.9rem; color: var(--card-foreground); }
+.stage-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.35rem; border-radius: 999px;
+  background: var(--accent); color: var(--accent-foreground); border: 1px solid var(--primary-pale);
+  font-size: 0.74rem; font-weight: 700;
+}
+.dot9 {
+  --d: 3.5px; --g: 2px;
+  width: calc(var(--d)*3 + var(--g)*2); height: calc(var(--d)*3 + var(--g)*2);
+  display: grid; grid-template-columns: repeat(3, var(--d)); gap: var(--g);
+}
+.dot9 span { width: var(--d); height: var(--d); border-radius: 999px; background: var(--primary-mid); opacity: 0.85; }
+
+.msg__body { font-size: 0.96rem; line-height: 1.7; color: var(--foreground); }
+.msg__body p { margin: 0 0 0.7em; }
+.msg__body p:last-child { margin-bottom: 0; }
+.msg__body strong { color: var(--card-foreground); font-weight: 650; }
+.msg__body ol, .msg__body ul { margin: 0.4em 0 0.8em; padding-left: 1.3em; }
+.msg__body li { margin: 0.3em 0; }
+.msg__body a {
+  color: var(--link); font-weight: 600; text-decoration: underline;
+  text-decoration-thickness: 2px; text-underline-offset: 3px;
+}
+.msg__footer {
+  display: flex; justify-content: flex-end; gap: 0.3rem;
+  margin-top: 0.85rem; padding-top: 0.7rem; border-top: 1px solid var(--border);
+}
+.msg__footer .btn { width: 2rem; height: 2rem; color: var(--muted-foreground); border-color: var(--border); background: var(--card); }
+
+.composer {
+  flex: none; padding: 0.75rem 1.25rem 0.9rem; border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, transparent); backdrop-filter: blur(10px);
+}
+.input-group {
+  max-width: 52rem; margin: 0 auto; display: flex; align-items: flex-end; gap: 0.5rem;
+  border: 1px solid var(--border); background: var(--card); border-radius: 16px;
+  padding: 0.4rem 0.4rem 0.4rem 0.9rem;
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+.input-group span { flex: 1; color: var(--muted-foreground); font-size: 0.92rem; padding: 0.55rem 0; }
+.send { width: 2.55rem; height: 2.55rem; border-radius: 12px; }
+.composer__meta {
+  max-width: 52rem; margin: 0.45rem auto 0; text-align: center;
+  color: var(--muted-foreground); font-size: 0.7rem;
+}
+
+.pair {
+  display: none;
+}
+html[data-view="pair"] .app { display: none; }
+html[data-view="pair"] .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 3.4rem 0.75rem 0.75rem;
+  background: #2a2f2c;
+}
+.pair iframe {
+  width: 100%; height: 100%; border: 0; border-radius: 12px;
+  background: var(--background);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+
+@media (max-width: 960px) {
+  .sidebar { display: none; }
+  html[data-view="pair"] .pair { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h10.5A2.25 2.25 0 0 1 19.5 6.75v6A2.25 2.25 0 0 1 17.25 15H10l-3.8 3.05a.6.6 0 0 1-.95-.48V15H6.75A2.25 2.25 0 0 1 4.5 12.75v-6Z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M8 7h11M8 12h11M8 17h11M5 7h.01M5 12h.01M5 17h.01"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="8.25"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-bullet" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3.25"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19 6.5v5.2c0 4.4-2.9 7.4-7 8.8-4.1-1.4-7-4.4-7-8.8V6.5L12 3.5Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="3.5"/><path d="M12 2.8v2.2M12 19v2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2.8 12H5M19 12h2.2M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 14.2A7.2 7.2 0 0 1 9.8 5.5 7.4 7.4 0 1 0 18.5 14.2Z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 12a7.5 7.5 0 1 1-2.1-5.2"/><path d="M19.5 4.5v4.2h-4.2"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5"/><path d="M21 3 14.2 21l-3.7-7.5L3 9.8 21 3Z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="10" height="10" rx="1.5"/><path d="M6.5 15.5H6A1.5 1.5 0 0 1 4.5 14V6A1.5 1.5 0 0 1 6 4.5h8A1.5 1.5 0 0 1 15.5 6v.5"/></symbol>
+</svg>
+
+<div class="chooser" id="chooser">
+  <strong>Palette</strong>
+  <button type="button" data-palette="forest" class="is-on">1 Forest</button>
+  <button type="button" data-palette="navy">2 Navy</button>
+  <button type="button" data-palette="teal">3 Teal</button>
+  <button type="button" data-palette="ink">4 Archive</button>
+  <button type="button" data-palette="saffron">5 Saffron</button>
+  <button type="button" data-palette="slate">6 Slate</button>
+  <span class="sep" aria-hidden="true"></span>
+  <strong>Theme</strong>
+  <button type="button" data-theme="light" class="is-on">Light</button>
+  <button type="button" data-theme="dark">Dark</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-view="single" class="is-on">Full UI</button>
+  <button type="button" data-view="pair">Light | Dark split</button>
+  <span class="hint">Full Manual AI UP shell · pick a palette</span>
+</div>
+
+<div class="app" id="full-ui">
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <img class="brand-logo" src="./assets/logo.jpg" width="44" height="44" alt=""/>
+      <div class="brand-text">
+        <strong>Manual AI UP</strong>
+        <span>Uttar Pradesh Government Manuals Assistant</span>
+      </div>
+    </div>
+    <nav class="sidebar__menu">
+      <button type="button" class="menu-item is-active"><svg class="ico"><use href="#i-chat"/></svg> Chat</button>
+      <button type="button" class="menu-item"><svg class="ico"><use href="#i-list"/></svg> Suggested Questions</button>
+      <button type="button" class="menu-item"><svg class="ico"><use href="#i-info"/></svg> About This Tool</button>
+    </nav>
+    <div class="sidebar__suggest">
+      <p class="sidebar__label">Suggested questions</p>
+      <button type="button" class="suggest-btn"><svg class="ico ico--sm suggest-mark"><use href="#i-bullet"/></svg><span>Pragati Portal URL</span></button>
+      <button type="button" class="suggest-btn"><svg class="ico ico--sm suggest-mark"><use href="#i-bullet"/></svg><span>IGRS max attachment size</span></button>
+      <button type="button" class="suggest-btn"><svg class="ico ico--sm suggest-mark"><use href="#i-bullet"/></svg><span>₹200 cr+ project approval</span></button>
+      <button type="button" class="suggest-btn"><svg class="ico ico--sm suggest-mark"><use href="#i-bullet"/></svg><span>Tender committee duties</span></button>
+      <button type="button" class="suggest-btn"><svg class="ico ico--sm suggest-mark"><use href="#i-bullet"/></svg><span>Chief Engineer financial powers</span></button>
+    </div>
+    <p class="sidebar__foot"><svg class="ico ico--sm"><use href="#i-shield"/></svg><span>Your data is secure. Built for public service.</span></p>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar__greeting">
+        <h1>Namaste! How can I help you today?</h1>
+        <p>Ask about government manuals, codes, or official procedures.</p>
+      </div>
+      <div class="topbar__actions">
+        <button type="button" class="btn btn-outline lang-toggle"><span class="on">EN</span> / हिं</button>
+        <button type="button" class="btn btn-outline"><svg class="ico"><use href="#i-refresh"/></svg> New Chat</button>
+        <button type="button" class="btn btn-ghost btn-icon" id="btn-theme-icon" aria-label="Theme">
+          <svg class="ico" id="icon-sun"><use href="#i-sun"/></svg>
+          <svg class="ico" id="icon-moon" hidden><use href="#i-moon"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="thread">
+      <div class="msg msg--user">
+        <div>
+          <div class="msg__bubble">Pragati Portal URL</div>
+          <div class="msg__meta">01:12</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <img class="msg__avatar" src="./assets/logo.jpg" width="34" height="34" alt=""/>
+        <div class="msg__card">
+          <div class="msg__head">
+            <span class="msg__name">Manual AI UP</span>
+            <span class="stage-badge">
+              <span class="dot9" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
+              Retrieving manuals
+            </span>
+          </div>
+          <div class="msg__body">
+            <p>The official address for the Pragati monitoring portal is:</p>
+            <p><strong>URL:</strong> <a href="https://www.pragati.upsdc.gov.in" target="_blank" rel="noopener">https://www.pragati.upsdc.gov.in</a></p>
+            <p><strong>Key points</strong></p>
+            <ul>
+              <li>Used for scheme / project monitoring dashboards</li>
+              <li>District-level progress tracking</li>
+              <li>Access via the UPSDC-hosted portal URL above</li>
+            </ul>
+          </div>
+          <div class="msg__footer">
+            <button type="button" class="btn btn-ghost btn-icon" aria-label="Copy"><svg class="ico"><use href="#i-copy"/></svg></button>
+            <button type="button" class="btn btn-ghost btn-icon" aria-label="Helpful">↑</button>
+            <button type="button" class="btn btn-ghost btn-icon" aria-label="Not helpful">↓</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg msg--user">
+        <div>
+          <div class="msg__bubble">IGRS max attachment size</div>
+          <div class="msg__meta">01:13</div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <img class="msg__avatar" src="./assets/logo.jpg" width="34" height="34" alt=""/>
+        <div class="msg__card">
+          <div class="msg__head"><span class="msg__name">Manual AI UP</span></div>
+          <div class="msg__body">
+            <p>On the IGRS / Jan-Sunwai system, the maximum upload attachment size is <strong>500 KB</strong>.</p>
+            <ol>
+              <li>Prepare the file under the size limit</li>
+              <li>Attach it on the grievance form</li>
+              <li>Submit and note the acknowledgment number</li>
+            </ol>
+          </div>
+          <div class="msg__footer">
+            <button type="button" class="btn btn-ghost btn-icon" aria-label="Copy"><svg class="ico"><use href="#i-copy"/></svg></button>
+            <button type="button" class="btn btn-ghost btn-icon">↑</button>
+            <button type="button" class="btn btn-ghost btn-icon">↓</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="composer">
+      <div class="input-group">
+        <span>Ask a question about government manuals or procedures…</span>
+        <button type="button" class="btn btn-primary btn-icon send" aria-label="Send"><svg class="ico"><use href="#i-send"/></svg></button>
+      </div>
+      <p class="composer__meta">For administrative guidance. Signed notifications remain authoritative.</p>
+    </footer>
+  </div>
+</div>
+
+<div class="pair" id="pair-view" aria-hidden="true">
+  <iframe id="frame-light" title="Light theme"></iframe>
+  <iframe id="frame-dark" title="Dark theme"></iframe>
+</div>
+
+<script>
+(function () {
+  const root = document.documentElement;
+  const params = new URLSearchParams(location.search);
+  const embedded = params.get("embed") === "1";
+  const palette = params.get("palette") || "forest";
+  const theme = params.get("theme") || "light";
+
+  function syncIcons() {
+    const dark = root.getAttribute("data-theme") === "dark";
+    const sun = document.getElementById("icon-sun");
+    const moon = document.getElementById("icon-moon");
+    if (sun) sun.hidden = dark;
+    if (moon) moon.hidden = !dark;
+  }
+
+  function setPalette(p) {
+    root.setAttribute("data-palette", p);
+    document.querySelectorAll("[data-palette]").forEach((b) => {
+      b.classList.toggle("is-on", b.getAttribute("data-palette") === p);
+    });
+    refreshPair();
+  }
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    document.querySelectorAll("[data-theme]").forEach((b) => {
+      b.classList.toggle("is-on", b.getAttribute("data-theme") === t);
+    });
+    syncIcons();
+  }
+  function setView(v) {
+    root.setAttribute("data-view", v);
+    document.querySelectorAll("[data-view]").forEach((b) => {
+      b.classList.toggle("is-on", b.getAttribute("data-view") === v);
+    });
+    const pair = document.getElementById("pair-view");
+    if (pair) pair.setAttribute("aria-hidden", v !== "pair");
+    refreshPair();
+  }
+
+  function refreshPair() {
+    if (root.getAttribute("data-view") !== "pair" || embedded) return;
+    const p = root.getAttribute("data-palette");
+    const base = location.pathname + "?embed=1&palette=" + encodeURIComponent(p);
+    const fl = document.getElementById("frame-light");
+    const fd = document.getElementById("frame-dark");
+    if (fl) fl.src = base + "&theme=light";
+    if (fd) fd.src = base + "&theme=dark";
+  }
+
+  if (embedded) {
+    document.getElementById("chooser").style.display = "none";
+    document.body.style.paddingTop = "0";
+    document.querySelector(".app").style.paddingTop = "0";
+    root.setAttribute("data-palette", palette);
+    root.setAttribute("data-theme", theme);
+    syncIcons();
+    return;
+  }
+
+  setPalette(palette);
+  setTheme(theme);
+  setView("single");
+
+  document.getElementById("chooser").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    if (btn.hasAttribute("data-palette")) setPalette(btn.getAttribute("data-palette"));
+    if (btn.hasAttribute("data-theme")) setTheme(btn.getAttribute("data-theme"));
+    if (btn.hasAttribute("data-view")) setView(btn.getAttribute("data-view"));
+  });
+
+  document.getElementById("btn-theme-icon")?.addEventListener("click", () => {
+    setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+})();
+</script>
+</body>
+</html>

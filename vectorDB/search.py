@@ -65,7 +65,6 @@ def init_services():
     # Import inside the function to avoid macOS top-level proxy freeze during Uvicorn startup
     print("Loading AI libraries (this might take a moment)...")
     from fastembed import SparseTextEmbedding
-    from fastembed.rerank.cross_encoder import TextCrossEncoder
 
     try:
         from vectorDB.embeddings import get_dense_embedder
@@ -84,15 +83,16 @@ def init_services():
             field_schema=PayloadSchemaType.KEYWORD,
         )
 
-    print("Loading models (dense, sparse, and reranker)...")
+    from vectorDB.rerankers import load_reranker, selected_name
+
+    reranker_name = selected_name()
+    print(f"Loading models (dense, sparse, and reranker={reranker_name})...")
     if dense_embedder is None:
         dense_embedder = get_dense_embedder()
     if sparse_embedder is None:
         sparse_embedder = SparseTextEmbedding(model_name="Qdrant/bm25")
     if reranker is None:
-        model = os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER
-        reranker = TextCrossEncoder(model_name=model)
-        _cap_rerank_length(reranker)
+        reranker = load_reranker(reranker_name)
     _services_ready = True
     print("Services ready!")
 
@@ -110,20 +110,39 @@ def _cap_rerank_length(encoder) -> None:
         tok.enable_truncation(max_length=RERANK_MAX_TOKENS)
 
 
-def truncate_for_rerank(text: str) -> str:
+def tokenizer_of(obj):
+    """FastEmbed keeps the tokenizer on encoder.model; ONNX backends keep theirs on the wrapper."""
+    if obj is None:
+        return None
+    direct = getattr(obj, "tokenizer", None)
+    if direct is not None and hasattr(direct, "encode"):
+        return direct
+    nested = getattr(getattr(obj, "model", None), "tokenizer", None)
+    if nested is not None and hasattr(nested, "encode"):
+        return nested
+    deeper = getattr(getattr(getattr(obj, "model", None), "model", None), "tokenizer", None)
+    if deeper is not None and hasattr(deeper, "encode"):
+        return deeper
+    return None
+
+
+def truncate_text(text: str, tokenizer=None) -> str:
     """Keep about RERANK_MAX_TOKENS tokens. Char cap is the fallback."""
     text = text or ""
-    tok = getattr(getattr(reranker, "model", None), "tokenizer", None)
-    if tok is not None:
+    if tokenizer is not None:
         try:
-            enc = tok.encode(text, add_special_tokens=False)
+            enc = tokenizer.encode(text, add_special_tokens=False)
             ids = list(getattr(enc, "ids", enc))
             if len(ids) <= RERANK_MAX_TOKENS:
                 return text
-            return tok.decode(ids[:RERANK_MAX_TOKENS])
+            return tokenizer.decode(ids[:RERANK_MAX_TOKENS])
         except Exception:
             pass
     return text[: RERANK_MAX_TOKENS * 4]
+
+
+def truncate_for_rerank(text: str) -> str:
+    return truncate_text(text, tokenizer_of(reranker))
 
 
 def _hit_key(hit) -> tuple:
@@ -146,7 +165,14 @@ def rrf_merge(batches: list, limit: int = RERANK_POOL) -> list:
             if key not in chosen:
                 chosen[key] = hit
     ordered = sorted(scores, key=lambda key: scores[key], reverse=True)
-    return [chosen[key] for key in ordered[:limit]]
+    from vectorDB.rerankers import stamp_rrf
+
+    chosen_hits = []
+    for key in ordered[:limit]:
+        hit = chosen[key]
+        stamp_rrf(hit, scores[key])
+        chosen_hits.append(hit)
+    return chosen_hits
 
 
 def run_hybrid_search(
@@ -160,6 +186,24 @@ def run_hybrid_search(
     Cross-encoder rerank is a separate once-per-request step. Pass dense_vector
     to reuse an embedding already computed for the cache lookup.
     """
+    from app.langsmith_tracing import traceable_if_available
+
+    @traceable_if_available(
+        name="qdrant.hybrid_search",
+        run_type="retriever",
+        metadata={"collection": COLLECTION_NAME},
+    )
+    def _run(q: str, lim: int, vector):
+        return _run_hybrid_search_inner(q, lim, vector)
+
+    return _run(question, limit, dense_vector)
+
+
+def _run_hybrid_search_inner(
+    question: str,
+    limit: int,
+    dense_vector: list[float] | None,
+):
     print(f"\nQuerying: '{question[:80]}'...")
 
     if dense_vector is not None:
@@ -220,26 +264,38 @@ def run_hybrid_search(
 
 def rerank_hits(question: str, candidates: list, top_k: int):
     """Score one fused pool. Documents are truncated before the cross-encoder."""
+    from app.langsmith_tracing import traceable_if_available
+
+    @traceable_if_available(
+        name="rerank",
+        run_type="chain",
+        metadata={"reranker": getattr(reranker, "name", None)},
+    )
+    def _run(q: str, docs: list, k: int):
+        return _rerank_hits_inner(q, docs, k)
+
+    return _run(question, candidates, top_k)
+
+
+def _rerank_hits_inner(question: str, candidates: list, top_k: int):
     if not candidates:
         return []
+    if reranker is None:
+        raise RuntimeError("Reranker is not loaded. Refusing to fall back to another backend.")
     started = time.perf_counter()
     with _tracer.start_as_current_span("rerank") as span:
-        span.set_attribute("model", os.getenv("RERANKER_MODEL") or DEFAULT_RERANKER)
+        span.set_attribute("model", getattr(reranker, "model_id", DEFAULT_RERANKER))
+        span.set_attribute("reranker.name", getattr(reranker, "name", "minilm"))
         span.set_attribute("num_docs", len(candidates))
         span.set_attribute("top_k", top_k)
         span.set_attribute("max_length", RERANK_MAX_TOKENS)
         try:
-            doc_texts = [
-                truncate_for_rerank(r.payload.get("text") or "") for r in candidates
-            ]
-            scores = list(reranker.rerank(question, doc_texts))
-            scored_pairs = sorted(
-                zip(scores, candidates), key=lambda x: x[0], reverse=True
-            )
+            pairs = reranker.rerank(question, candidates, top_k)
             reranked = []
-            for score, candidate in scored_pairs[:top_k]:
+            for candidate, score in pairs:
                 candidate.score = float(score)
                 reranked.append(candidate)
+            span.set_attribute("batch_size", int(getattr(reranker, "batch_size", len(candidates))))
             print(
                 f"✅ Re-ranked {len(candidates)} candidates → returning top {len(reranked)}"
             )
@@ -250,7 +306,12 @@ def rerank_hits(question: str, candidates: list, top_k: int):
             print(f"⚠️  Re-ranking failed ({e}), falling back to RRF order")
             return candidates[:top_k]
         finally:
-            note_timing("rerank_ms", (time.perf_counter() - started) * 1000)
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            span.set_attribute(
+                "batch_size", int(getattr(reranker, "batch_size", len(candidates)))
+            )
+            span.set_attribute("ms", round(elapsed_ms, 2))
+            note_timing("rerank_ms", elapsed_ms)
 
 
 async def rerank_once(question: str, candidates: list, top_k: int):

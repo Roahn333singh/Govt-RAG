@@ -48,8 +48,8 @@ class OpenRouterEmbeddings:
         model: str | None = None,
         dimensions: int | None = None,
         batch_size: int = 32,
-        timeout: float = 20.0,
-        max_retries: int = 2,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
@@ -62,11 +62,20 @@ class OpenRouterEmbeddings:
             or os.getenv("OPENROUTER_EMBEDDING_DIMENSIONS", DEFAULT_DIMENSIONS)
         )
         self.batch_size = batch_size
-        self.timeout = timeout
-        self.max_retries = max_retries
+        # Eval fans out 3 query embeds per item; 20s was too tight when OpenRouter is slow.
+        self.timeout = float(
+            timeout
+            if timeout is not None
+            else os.getenv("OPENROUTER_EMBEDDING_TIMEOUT", "60")
+        )
+        self.max_retries = int(
+            max_retries
+            if max_retries is not None
+            else os.getenv("OPENROUTER_EMBEDDING_RETRIES", "4")
+        )
         # One pooled client for the process. httpx.Client is safe to share across threads.
         self._http = httpx.Client(
-            timeout=timeout,
+            timeout=self.timeout,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -75,6 +84,24 @@ class OpenRouterEmbeddings:
 
     # ── Internal request with retry ──────────────────────────────────────
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        from app.langsmith_tracing import record_embedding_usage, traceable_if_available
+
+        @traceable_if_available(
+            name="openrouter.embed",
+            run_type="embedding",
+            metadata={
+                "ls_provider": "openrouter",
+                "ls_model_name": self.model,
+            },
+        )
+        def _run(batch: list[str]) -> list[list[float]]:
+            return self._embed_batch_inner(batch)
+
+        return _run(texts)
+
+    def _embed_batch_inner(self, texts: list[str]) -> list[list[float]]:
+        from app.langsmith_tracing import record_embedding_usage
+
         payload = {
             "model": self.model,
             "input": texts,
@@ -92,9 +119,22 @@ class OpenRouterEmbeddings:
                         response.raise_for_status()
                         data = response.json()
                         usage = data.get("usage") or {}
-                        span.set_attribute("prompt_tokens", int(usage.get("prompt_tokens") or 0))
+                        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+                        span.set_attribute("prompt_tokens", prompt_tokens)
                         span.set_attribute(
                             "completion_tokens", int(usage.get("completion_tokens") or 0)
+                        )
+                        cost = usage.get("cost")
+                        try:
+                            total_cost = float(cost) if cost is not None else None
+                        except (TypeError, ValueError):
+                            total_cost = None
+                        if total_cost is not None:
+                            span.set_attribute("total_cost_usd", total_cost)
+                        record_embedding_usage(
+                            model=self.model,
+                            prompt_tokens=prompt_tokens,
+                            total_cost=total_cost,
                         )
                     except Exception as exc:
                         span.record_exception(exc)

@@ -11,7 +11,6 @@ from qdrant_client.models import Prefetch, FusionQuery, Fusion, SparseVector
 search.init_services()
 dense_embedder = search.dense_embedder
 sparse_embedder = search.sparse_embedder
-reranker = search.reranker
 qdrant_client = search.qdrant_client
 COLLECTION_NAME = search.COLLECTION_NAME
 
@@ -74,10 +73,9 @@ def debug_search(question: str) -> None:
         _print_hit(i, "RRF", c.score, c)
 
     print(f"\n[STAGE 2] After cross-encoder reranking (top {TOP_CE}):\n")
-    scores = list(reranker.rerank(question, [c.payload["text"] for c in candidates]))
-    ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)[:TOP_CE]
-    for i, (s, c) in enumerate(ranked, 1):
-        _print_hit(i, "CE", s, c)
+    ranked = search.rerank_hits(question, candidates, TOP_CE)
+    for i, hit in enumerate(ranked, 1):
+        _print_hit(i, "CE", hit.score, hit)
 
     print("TIP: Stage 2 is what the chat app roughly feeds the LLM.")
     print("     Copy document-id / source / point_id to filter or delete in Qdrant.")

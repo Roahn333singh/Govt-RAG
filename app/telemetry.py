@@ -111,18 +111,24 @@ def traced_node(name: str, timing_key: str | None = None):
     return deco
 
 
-def annotate_llm(span, response, model: str, status_code: int = 200) -> None:
-    """Copy token counts onto an llm.openrouter span. Never the prompt text."""
+def annotate_llm(span, response, model: str, status_code: int = 200, *, role: str = "chat") -> None:
+    """Copy token counts onto an llm.openrouter span and the LangSmith run."""
     span.set_attribute("model", model)
     span.set_attribute("http.status_code", status_code)
     usage = getattr(response, "usage_metadata", None) or {}
     meta = getattr(response, "response_metadata", None) or {}
     token_usage = meta.get("token_usage") or {}
-    span.set_attribute(
-        "prompt_tokens",
-        int(usage.get("input_tokens") or token_usage.get("prompt_tokens") or 0),
+    prompt_tokens = int(usage.get("input_tokens") or token_usage.get("prompt_tokens") or 0)
+    completion_tokens = int(
+        usage.get("output_tokens") or token_usage.get("completion_tokens") or 0
     )
-    span.set_attribute(
-        "completion_tokens",
-        int(usage.get("output_tokens") or token_usage.get("completion_tokens") or 0),
-    )
+    span.set_attribute("prompt_tokens", prompt_tokens)
+    span.set_attribute("completion_tokens", completion_tokens)
+    try:
+        from app.langsmith_tracing import record_llm_usage
+
+        recorded = record_llm_usage(response, model, role=role)
+        if recorded.get("total_cost") is not None:
+            span.set_attribute("total_cost_usd", float(recorded["total_cost"]))
+    except Exception:
+        pass

@@ -92,6 +92,34 @@ def api_key_label(provided: str | None) -> str | None:
     return None
 
 
+def is_qa_api_key(provided: str | None) -> bool:
+    """True only when QA_API_KEY is configured and the header matches it.
+
+    Session tokens and APP_API_KEY / API_KEYS never match. Length mismatch
+    returns False without calling compare_digest (which requires equal length).
+    """
+    expected = (os.getenv("QA_API_KEY") or "").encode()
+    if not expected or not provided:
+        return False
+    provided_b = provided.encode()
+    if len(provided_b) != len(expected):
+        return False
+    return secrets.compare_digest(provided_b, expected)
+
+
+def chat_rate_limit_key(request: Request) -> str:
+    """Rate-limit key for /chat.
+
+    A valid QA_API_KEY gets a fresh bucket every request so the 15/min and
+    100/day caps never apply to load tests. Session tokens and other API keys
+    still share the real client IP bucket. (slowapi's exempt_when takes no
+    request argument in our version, so a key_func is the workable option.)
+    """
+    if is_qa_api_key(request.headers.get("x-api-key")):
+        return f"qa:{time.time_ns()}:{id(request)}"
+    return real_client_ip(request)
+
+
 async def require_client(request: Request) -> None:
     """Accept X-API-Key (scripts) or a UI-issued X-Session-Token."""
     label = api_key_label(request.headers.get("x-api-key"))

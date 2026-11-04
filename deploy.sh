@@ -45,22 +45,45 @@ gcloud artifacts repositories add-iam-policy-binding "${REPO}" \
   >/dev/null || true
 
 echo "==> Build & push image via Cloud Build"
-gcloud builds submit --tag "${IMAGE}" --project="${PROJECT_ID}"
+# GTE-base ONNX export needs more than the default 4 GiB Cloud Build machine.
+gcloud builds submit \
+  --tag "${IMAGE}" \
+  --project="${PROJECT_ID}" \
+  --timeout=3600 \
+  --machine-type=E2_HIGHCPU_32
 
 SERVICE_URL_HINT="https://${SERVICE}-nszha5soya-ey.a.run.app"
+# Override for a no-traffic candidate, e.g.:
+#   RERANKER=colbert COLBERT_COLLECTION=my-collection-colbert \
+#   COLBERT_REJECT_THRESHOLD=17.779879 ./deploy.sh
+DEPLOY_RERANKER="${RERANKER:-gte}"
+DEPLOY_COLBERT_COLLECTION="${COLBERT_COLLECTION:-}"
+DEPLOY_COLBERT_REJECT_THRESHOLD="${COLBERT_REJECT_THRESHOLD:-}"
 # Commas in CORS_ORIGINS break --set-env-vars; use a YAML env file instead.
 ENV_FILE="$(mktemp /tmp/manual-ai-env.XXXXXX.yaml)"
 cat > "${ENV_FILE}" <<EOF
 OPENROUTER_LLM_MODEL: "google/gemini-2.5-flash"
 OPENROUTER_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
+RERANKER: "${DEPLOY_RERANKER}"
 RERANKER_MODEL: "Xenova/ms-marco-MiniLM-L-6-v2"
 DOC_VERSION: "2026-10-27"
 GIT_SHA: "$(git rev-parse --short HEAD)"
 OTEL_ENABLED: "true"
 OTEL_SAMPLE_RATE: "1.0"
+LANGSMITH_TRACING: "true"
+LANGSMITH_PROJECT: "govt-rag"
+# Testing only. Delete these lines to restore the code defaults of 15/minute and 100/day.
+CHAT_RATE_MINUTE: "2000/minute"
+CHAT_RATE_DAY: "1000000/day"
 ALLOWED_ORIGINS: "${SERVICE_URL_HINT}"
 EOF
+if [[ -n "${DEPLOY_COLBERT_COLLECTION}" ]]; then
+  printf 'COLBERT_COLLECTION: "%s"\n' "${DEPLOY_COLBERT_COLLECTION}" >> "${ENV_FILE}"
+fi
+if [[ -n "${DEPLOY_COLBERT_REJECT_THRESHOLD}" ]]; then
+  printf 'COLBERT_REJECT_THRESHOLD: "%s"\n' "${DEPLOY_COLBERT_REJECT_THRESHOLD}" >> "${ENV_FILE}"
+fi
 trap 'rm -f "${ENV_FILE}"' EXIT
 
 # App-generated secrets: create a random value on first deploy.
@@ -88,7 +111,7 @@ if gcloud secrets describe rag-qa-api-key --project="${PROJECT_ID}" >/dev/null 2
 else
   echo "WARN: secret rag-qa-api-key not found — QA key not mounted"
 fi
-for s in RATE_LIMIT_STORAGE_URI; do
+for s in RATE_LIMIT_STORAGE_URI LANGSMITH_API_KEY; do
   if gcloud secrets describe "${s}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
     SECRETS="${SECRETS},${s}=${s}:latest"
   else
