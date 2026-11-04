@@ -48,8 +48,8 @@ class OpenRouterEmbeddings:
         model: str | None = None,
         dimensions: int | None = None,
         batch_size: int = 32,
-        timeout: float = 20.0,
-        max_retries: int = 2,
+        timeout: float | None = None,
+        max_retries: int | None = None,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
@@ -62,11 +62,20 @@ class OpenRouterEmbeddings:
             or os.getenv("OPENROUTER_EMBEDDING_DIMENSIONS", DEFAULT_DIMENSIONS)
         )
         self.batch_size = batch_size
-        self.timeout = timeout
-        self.max_retries = max_retries
+        # Eval fans out 3 query embeds per item; 20s was too tight when OpenRouter is slow.
+        self.timeout = float(
+            timeout
+            if timeout is not None
+            else os.getenv("OPENROUTER_EMBEDDING_TIMEOUT", "60")
+        )
+        self.max_retries = int(
+            max_retries
+            if max_retries is not None
+            else os.getenv("OPENROUTER_EMBEDDING_RETRIES", "4")
+        )
         # One pooled client for the process. httpx.Client is safe to share across threads.
         self._http = httpx.Client(
-            timeout=timeout,
+            timeout=self.timeout,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",

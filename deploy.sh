@@ -53,13 +53,19 @@ gcloud builds submit \
   --machine-type=E2_HIGHCPU_32
 
 SERVICE_URL_HINT="https://${SERVICE}-nszha5soya-ey.a.run.app"
+# Override for a no-traffic candidate, e.g.:
+#   RERANKER=colbert COLBERT_COLLECTION=my-collection-colbert \
+#   COLBERT_REJECT_THRESHOLD=17.779879 ./deploy.sh
+DEPLOY_RERANKER="${RERANKER:-gte}"
+DEPLOY_COLBERT_COLLECTION="${COLBERT_COLLECTION:-}"
+DEPLOY_COLBERT_REJECT_THRESHOLD="${COLBERT_REJECT_THRESHOLD:-}"
 # Commas in CORS_ORIGINS break --set-env-vars; use a YAML env file instead.
 ENV_FILE="$(mktemp /tmp/manual-ai-env.XXXXXX.yaml)"
 cat > "${ENV_FILE}" <<EOF
 OPENROUTER_LLM_MODEL: "google/gemini-2.5-flash"
 OPENROUTER_EMBEDDING_MODEL: "qwen/qwen3-embedding-8b"
 OPENROUTER_EMBEDDING_DIMENSIONS: "1536"
-RERANKER: "gte"
+RERANKER: "${DEPLOY_RERANKER}"
 RERANKER_MODEL: "Xenova/ms-marco-MiniLM-L-6-v2"
 DOC_VERSION: "2026-10-27"
 GIT_SHA: "$(git rev-parse --short HEAD)"
@@ -72,6 +78,12 @@ CHAT_RATE_MINUTE: "2000/minute"
 CHAT_RATE_DAY: "1000000/day"
 ALLOWED_ORIGINS: "${SERVICE_URL_HINT}"
 EOF
+if [[ -n "${DEPLOY_COLBERT_COLLECTION}" ]]; then
+  printf 'COLBERT_COLLECTION: "%s"\n' "${DEPLOY_COLBERT_COLLECTION}" >> "${ENV_FILE}"
+fi
+if [[ -n "${DEPLOY_COLBERT_REJECT_THRESHOLD}" ]]; then
+  printf 'COLBERT_REJECT_THRESHOLD: "%s"\n' "${DEPLOY_COLBERT_REJECT_THRESHOLD}" >> "${ENV_FILE}"
+fi
 trap 'rm -f "${ENV_FILE}"' EXIT
 
 # App-generated secrets: create a random value on first deploy.

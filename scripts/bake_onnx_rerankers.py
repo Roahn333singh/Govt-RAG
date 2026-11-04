@@ -6,9 +6,22 @@ include them and does not download weights.
 
 from __future__ import annotations
 
+import gc
 import os
 import shutil
 from pathlib import Path
+
+
+def _free_bake_memory() -> None:
+    """Drop torch graphs between exports so Cloud Build default VMs don't OOM (137)."""
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
 
 ROOT = Path(os.environ.get("FASTEMBED_CACHE_PATH", "/app/models")) / "rerankers"
 TOKENIZER_FILES = (
@@ -141,6 +154,8 @@ def export_gte(model_id: str, dest: Path) -> None:
             **export_kwargs,
         )
     save_tokenizer(model_id, dest)
+    del wrapper, model, tokenizer, dummy
+    _free_bake_memory()
 
 
 def _finish_quantized(fp32: Path, dest: Path) -> None:
@@ -164,10 +179,12 @@ def main() -> None:
     export_fp32("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1", mmarco)
     _require(mmarco / "model.onnx")
     _require(mmarco / "tokenizer.json")
+    _free_bake_memory()
 
     fp32 = Path("/tmp/gte_reranker_fp32")
     print("Exporting Alibaba-NLP/gte-multilingual-reranker-base and quantizing to int8...")
     export_gte("Alibaba-NLP/gte-multilingual-reranker-base", fp32)
+    _free_bake_memory()
     _finish_quantized(fp32, ROOT / "gte")
     print("ONNX reranker bake complete.")
 
