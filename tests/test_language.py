@@ -38,6 +38,10 @@ async def test_generator_states_the_answer_language(monkeypatch):
             seen["prompt"] = prompt
             return AIMessage(content="Answer. Sources: Doc.pdf, Page: 1")
 
+        async def astream(self, prompt):
+            seen["prompt"] = prompt
+            yield AIMessage(content="Answer. Sources: Doc.pdf, Page: 1")
+
     monkeypatch.setattr(lang_graph, "get_llm", lambda temperature=0.7: Capture())
     await lang_graph.generator_node(
         {

@@ -547,6 +547,32 @@ html.dark-theme .memo-card__seal {
     font-variant-numeric: tabular-nums;
 }
 
+.memo-card__status {
+    color: var(--ink-muted, #6b7280);
+    font-size: 0.92rem;
+    font-style: italic;
+    margin: 0.15rem 0 0.35rem;
+}
+
+.memo-card.is-streaming .memo-card__body {
+    min-height: 1.5em;
+}
+
+.stream-caret {
+    display: inline-block;
+    width: 0.55ch;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: currentColor;
+    animation: stream-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes stream-caret-blink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+}
+
 .memo-card__body {
     padding: 16px 20px 8px;
     font-size: 0.95rem;

@@ -55,12 +55,14 @@ from agent.cache_policy import (
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
-from app.request_context import note_cache, note_question_length, note_timing
+from app.request_context import note_cache, note_question_length, note_timing, qa_timings_payload
 from app.request_log import install_request_logging
 from app.telemetry import run_traced_in_threadpool, setup_telemetry
 from agent.security import (
     SESSION_TOKEN_TTL_SECONDS,
     admin_token_ok,
+    chat_rate_limit_key,
+    is_qa_api_key,
     issue_session_token,
     real_client_ip,
     require_client,
@@ -123,6 +125,18 @@ limiter = Limiter(
     swallow_errors=True,
     in_memory_fallback_enabled=_RATE_LIMIT_STORAGE != "memory://",
 )
+
+
+def _qa_langsmith_extras(request: Request) -> dict:
+    """Tags/metadata for QA load-test traffic. Never logs the API key."""
+    extras: dict = {"extra_tags": [], "extra_metadata": {}}
+    if getattr(request.state, "key_id", None) == "qa":
+        extras["extra_tags"].append("qa_key")
+    run_id = (request.headers.get("x-qa-run-id") or "").strip()
+    if run_id:
+        extras["extra_tags"].append(f"qa_run:{run_id[:64]}")
+        extras["extra_metadata"]["qa_run_id"] = run_id[:128]
+    return extras
 
 
 def get_compile_all():
@@ -405,15 +419,20 @@ def _sse(payload: dict) -> str:
     return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
 
-def _text_chunks(text: str, words_per_chunk: int = 6):
-    words = (text or "").split(" ")
-    total = len(words)
-    for i in range(0, total, words_per_chunk):
-        piece = " ".join(words[i : i + words_per_chunk])
-        if i + words_per_chunk < total:
-            piece += " "
-        if piece:
-            yield piece
+# Prevent proxies / browsers from buffering the whole answer before paint.
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+def _stream_response(generator) -> StreamingResponse:
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 def _chat_response(
@@ -422,18 +441,25 @@ def _chat_response(
     session_id: str,
     cached: bool,
     request: Request | None = None,
-) -> dict:
+) -> JSONResponse:
     # The log reads this off the request. The contextvar alone is not visible
     # to the middleware task that prints request_done.
     if request is not None:
         request.state.cache_hit = bool(cached)
     note_cache(bool(cached))
-    return {
+    body = {
         "answer": answer,
         "sources": cited_sources(answer, sources),
         "session_id": session_id,
         "cached": cached,
     }
+    headers: dict[str, str] = {}
+    # Stage timings are for QA/load tests only — never expose to normal clients.
+    if request is not None and is_qa_api_key(request.headers.get("x-api-key")):
+        timings = qa_timings_payload()
+        body["timings"] = timings
+        headers["X-Timing"] = json.dumps(timings, separators=(",", ":"))
+    return JSONResponse(content=body, headers=headers)
 
 
 @app.get("/health")
@@ -499,8 +525,8 @@ if os.path.isdir(_UI_DIR):
 
 
 @app.post("/chat")
-@limiter.limit(CHAT_RATE_MINUTE)
-@limiter.limit(CHAT_RATE_DAY)
+@limiter.limit(CHAT_RATE_MINUTE, key_func=chat_rate_limit_key)
+@limiter.limit(CHAT_RATE_DAY, key_func=chat_rate_limit_key)
 async def users_chat(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],
@@ -524,13 +550,15 @@ async def users_chat(
                     span.set_attribute("cache.hit", True)
                     span.set_attribute("cache.score", 1.0)
                 note_cache(True)
+                qa_ls = _qa_langsmith_extras(request)
                 with chat_tracing(
                     session_id=session_id,
                     language=user_lang,
                     request_id=getattr(request.state, "request_id", None),
                     cached=True,
                     stream=False,
-                    extra_tags=["exact_cache"],
+                    extra_tags=["exact_cache", *qa_ls["extra_tags"]],
+                    extra_metadata=qa_ls["extra_metadata"],
                 ):
                     return _chat_response(
                         remembered["answer"],
@@ -547,13 +575,15 @@ async def users_chat(
                 if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
                     return _chat_response(INJECTION_REFUSAL, [], session_id, False, request)
                 answer = filter_output(raw, message) or REFUSAL_TEXT
+                qa_ls = _qa_langsmith_extras(request)
                 with chat_tracing(
                     session_id=session_id,
                     language=user_lang,
                     request_id=getattr(request.state, "request_id", None),
                     cached=True,
                     stream=False,
-                    extra_tags=["semantic_cache"],
+                    extra_tags=["semantic_cache", *qa_ls["extra_tags"]],
+                    extra_metadata=qa_ls["extra_metadata"],
                 ):
                     return _chat_response(
                         answer,
@@ -566,12 +596,15 @@ async def users_chat(
             print("Asking processor to think...")
             graph = get_compile_all()()
             request_id = getattr(request.state, "request_id", None)
+            qa_ls = _qa_langsmith_extras(request)
             with chat_tracing(
                 session_id=session_id,
                 language=user_lang,
                 request_id=request_id,
                 cached=False,
                 stream=False,
+                extra_tags=qa_ls["extra_tags"],
+                extra_metadata=qa_ls["extra_metadata"],
             ) as config:
                 async with _llm_slots:
                     result = await graph.ainvoke(
@@ -613,9 +646,38 @@ async def users_chat(
         return _busy_response(request, session_id)
 
 
+async def _sse_flash_answer(
+    answer: str,
+    *,
+    sources: list,
+    session_id: str,
+    cached: bool,
+):
+    """Emit the full answer in one frame (cache hits / refusals — no fake typing)."""
+    if answer:
+        yield _sse({"type": "token", "text": answer})
+    yield _sse(
+        {
+            "type": "done",
+            "sources": sources,
+            "session_id": session_id,
+            "cached": cached,
+        }
+    )
+
+
+def _stream_chunk_text(chunk) -> str:
+    content = getattr(chunk, "content", None) if chunk else None
+    if isinstance(content, list):
+        return "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    return content if isinstance(content, str) else ""
+
+
 @app.post("/chat/stream")
-@limiter.limit(CHAT_RATE_MINUTE)
-@limiter.limit(CHAT_RATE_DAY)
+@limiter.limit(CHAT_RATE_MINUTE, key_func=chat_rate_limit_key)
+@limiter.limit(CHAT_RATE_DAY, key_func=chat_rate_limit_key)
 async def users_chat_stream(
     request: Request,
     generated_session_id: Annotated[str, Depends(generate)],
@@ -624,126 +686,158 @@ async def users_chat_stream(
     session_id: str | None = None,
     chat_data: ChatRequest | None = Body(default=None),
 ):
+    """SSE token stream. Work runs inside the generator so headers flush first.
+
+    Concurrent streams are not serialized on `_llm_slots` (that queue would hold
+    later clients with an empty socket through embed+retrieve). Cloud Run
+    concurrency + OpenRouter limits still bound load; `/chat` keeps the slot.
+    """
     message = resolve_message(message, chat_data)
     session_id = resolve_session_id(generated_session_id, session_id, chat_data)
     user_lang = detect_answer_language(message)
+    request_id = getattr(request.state, "request_id", None)
+    qa_ls = _qa_langsmith_extras(request)
 
     if is_injection(message):
         request.state.cache_hit = False
 
         async def refusal_stream():
-            yield _sse({"type": "token", "text": INJECTION_REFUSAL})
-            yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
+            yield _sse({"type": "status", "stage": "done"})
+            async for frame in _sse_flash_answer(
+                INJECTION_REFUSAL,
+                sources=[],
+                session_id=session_id,
+                cached=False,
+            ):
+                yield frame
 
-        return StreamingResponse(refusal_stream(), media_type="text/event-stream")
+        return _stream_response(refusal_stream())
 
-    try:
-        remembered = _recall_exact(message, user_lang)
-        if remembered:
-            with _tracer.start_as_current_span("cache.lookup") as span:
-                span.set_attribute("cache.hit", True)
-                span.set_attribute("cache.score", 1.0)
-            request.state.cache_hit = True
-            note_cache(True)
-
-            async def exact_stream():
-                for piece in _text_chunks(remembered["answer"]):
-                    yield _sse({"type": "token", "text": piece})
-                yield _sse(
-                    {
-                        "type": "done",
-                        "sources": remembered["sources"],
-                        "session_id": session_id,
-                        "cached": True,
-                    }
-                )
-
-            return StreamingResponse(exact_stream(), media_type="text/event-stream")
-
-        query_vector = await _embed_question(message)
-        cached = await _lookup_cache(message, user_lang, query_vector)
-        if cached:
-            raw = cached.get("answer") or ""
-            if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
-                answer, sources = INJECTION_REFUSAL, []
-                request.state.cache_hit = False
-            else:
-                answer = filter_output(raw, message) or REFUSAL_TEXT
-                sources = cited_sources(answer, cached.get("sources") or [])
-                request.state.cache_hit = True
-            note_cache(bool(request.state.cache_hit))
-
-            async def cached_stream():
-                for piece in _text_chunks(answer):
-                    yield _sse({"type": "token", "text": piece})
-                yield _sse(
-                    {
-                        "type": "done",
-                        "sources": sources,
-                        "session_id": session_id,
-                        "cached": True,
-                    }
-                )
-
-            return StreamingResponse(cached_stream(), media_type="text/event-stream")
-
-        graph = get_compile_all()()
-        request_id = getattr(request.state, "request_id", None)
-
-        async def generate_and_save_stream():
-            final_answer = ""
-            sources: list = []
-            try:
-                async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
-                    with chat_tracing(
+    async def event_stream():
+        # Status first so the client paints immediately (before embed/LLM).
+        yield _sse({"type": "status", "stage": "starting"})
+        try:
+            async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
+                remembered = _recall_exact(message, user_lang)
+                if remembered:
+                    with _tracer.start_as_current_span("cache.lookup") as span:
+                        span.set_attribute("cache.hit", True)
+                        span.set_attribute("cache.score", 1.0)
+                    request.state.cache_hit = True
+                    note_cache(True)
+                    yield _sse({"type": "status", "stage": "cached"})
+                    async for frame in _sse_flash_answer(
+                        remembered["answer"],
+                        sources=remembered["sources"],
                         session_id=session_id,
-                        language=user_lang,
-                        request_id=request_id,
-                        cached=False,
-                        stream=True,
-                    ) as config:
-                        async with _llm_slots:
-                            async for event in graph.astream_events(
-                                {
-                                    "messages": [{"role": "user", "content": message}],
-                                    "session_id": session_id,
-                                    "answer_language": user_lang,
-                                    "query_vector": query_vector,
-                                    "sources": [],
-                                },
-                                config,
-                                version="v2",
-                            ):
-                                kind = event.get("event")
-                                if kind == "on_chat_model_stream":
-                                    meta = event.get("metadata") or {}
-                                    node = meta.get("langgraph_node")
-                                    if node and node != "generator":
-                                        continue
-                                    chunk = event.get("data", {}).get("chunk")
-                                    content = getattr(chunk, "content", None) if chunk else None
-                                    if isinstance(content, list):
-                                        content = "".join(
-                                            part.get("text", "")
-                                            for part in content
-                                            if isinstance(part, dict)
-                                        )
-                                    if content:
-                                        yield _sse({"type": "token", "text": content})
-                                        final_answer += content
-                                elif kind == "on_chain_end":
-                                    output = (event.get("data") or {}).get("output") or {}
-                                    if isinstance(output, dict) and output.get("sources"):
-                                        sources = output["sources"]
+                        cached=True,
+                    ):
+                        yield frame
+                    return
+
+                yield _sse({"type": "status", "stage": "embedding"})
+                query_vector = await _embed_question(message)
+
+                yield _sse({"type": "status", "stage": "cache_lookup"})
+                cached = await _lookup_cache(message, user_lang, query_vector)
+                if cached:
+                    raw = cached.get("answer") or ""
+                    if answer_echoes_markers(message, raw) or filter_output(raw, message) is None:
+                        answer, sources = INJECTION_REFUSAL, []
+                        request.state.cache_hit = False
+                    else:
+                        answer = filter_output(raw, message) or REFUSAL_TEXT
+                        sources = cited_sources(answer, cached.get("sources") or [])
+                        request.state.cache_hit = True
+                    note_cache(bool(request.state.cache_hit))
+                    yield _sse(
+                        {
+                            "type": "status",
+                            "stage": "cached" if request.state.cache_hit else "done",
+                        }
+                    )
+                    async for frame in _sse_flash_answer(
+                        answer,
+                        sources=sources,
+                        session_id=session_id,
+                        cached=bool(request.state.cache_hit),
+                    ):
+                        yield frame
+                    return
+
+                request.state.cache_hit = False
+                note_cache(False)
+                yield _sse({"type": "status", "stage": "retrieving"})
+                graph = get_compile_all()()
+                final_answer = ""
+                sources: list = []
+                stage = "retrieving"
+
+                with chat_tracing(
+                    session_id=session_id,
+                    language=user_lang,
+                    request_id=request_id,
+                    cached=False,
+                    stream=True,
+                    extra_tags=qa_ls["extra_tags"],
+                    extra_metadata=qa_ls["extra_metadata"],
+                ) as config:
+                    # No `_llm_slots` here: concurrent browsers must not wait
+                    # behind another request's embed/rerank with a silent socket.
+                    async for event in graph.astream_events(
+                        {
+                            "messages": [{"role": "user", "content": message}],
+                            "session_id": session_id,
+                            "answer_language": user_lang,
+                            "query_vector": query_vector,
+                            "sources": [],
+                        },
+                        config,
+                        version="v2",
+                    ):
+                        kind = event.get("event")
+                        meta = event.get("metadata") or {}
+                        node = meta.get("langgraph_node") or event.get("name")
+
+                        if kind == "on_chain_start" and node in {
+                            "query_rewriter",
+                            "retriever",
+                            "generator",
+                        }:
+                            mapped = {
+                                "query_rewriter": "rewriting",
+                                "retriever": "retrieving",
+                                "generator": "generating",
+                            }[node]
+                            if mapped != stage:
+                                stage = mapped
+                                yield _sse({"type": "status", "stage": stage})
+
+                        if kind == "on_chat_model_stream":
+                            if node and node != "generator":
+                                continue
+                            if stage != "generating":
+                                stage = "generating"
+                                yield _sse({"type": "status", "stage": "generating"})
+                            text = _stream_chunk_text(
+                                (event.get("data") or {}).get("chunk")
+                            )
+                            if text:
+                                final_answer += text
+                                yield _sse({"type": "token", "text": text})
+                        elif kind == "on_chain_end":
+                            output = (event.get("data") or {}).get("output") or {}
+                            if isinstance(output, dict) and output.get("sources"):
+                                sources = output["sources"]
 
                 filtered = filter_output(final_answer, message)
-                if filtered and filtered != final_answer:
-                    yield _sse({"type": "replace", "text": filtered})
                 if filtered is None:
                     final_answer = INJECTION_REFUSAL
                     sources = []
                     yield _sse({"type": "replace", "text": INJECTION_REFUSAL})
                 else:
+                    if filtered != final_answer:
+                        yield _sse({"type": "replace", "text": filtered})
                     final_answer = filtered
                     sources = cited_sources(final_answer, sources)
                     if _is_cacheable_answer(final_answer, sources, message):
@@ -751,6 +845,7 @@ async def users_chat_stream(
                             message, final_answer, user_lang, query_vector, sources
                         )
                     _remember_exact(message, user_lang, final_answer, sources)
+
                 yield _sse(
                     {
                         "type": "done",
@@ -759,25 +854,39 @@ async def users_chat_stream(
                         "cached": False,
                     }
                 )
-            except TimeoutError:
-                print(f"/chat/stream timeout after {REQUEST_TIMEOUT_SECONDS}s")
-                yield _sse({"type": "token", "text": "The desk is busy. Please retry your question in a few seconds."})
-                yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
-            except Exception as e:
-                print(f"Streaming error: {type(e).__name__}: {e}")
-                yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
-                yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
+        except TimeoutError:
+            print(f"/chat/stream timeout after {REQUEST_TIMEOUT_SECONDS}s")
+            request.state.cache_hit = False
+            yield _sse(
+                {
+                    "type": "error",
+                    "text": "The desk is busy. Please retry your question in a few seconds.",
+                }
+            )
+            yield _sse(
+                {
+                    "type": "done",
+                    "sources": [],
+                    "session_id": session_id,
+                    "cached": False,
+                }
+            )
+        except Exception as e:
+            print(f"Streaming error: {type(e).__name__}: {e}")
+            request.state.cache_hit = False
+            yield _sse(
+                {
+                    "type": "error",
+                    "text": "Unable to retrieve an answer right now. Please try again.",
+                }
+            )
+            yield _sse(
+                {
+                    "type": "done",
+                    "sources": [],
+                    "session_id": session_id,
+                    "cached": False,
+                }
+            )
 
-        request.state.cache_hit = False
-        return StreamingResponse(
-            generate_and_save_stream(), media_type="text/event-stream"
-        )
-    except Exception as e:
-        print(f"/chat/stream error: {type(e).__name__}: {e}")
-
-        async def err_stream():
-            yield _sse({"type": "token", "text": "Unable to retrieve an answer right now. Please try again."})
-            yield _sse({"type": "done", "sources": [], "session_id": session_id, "cached": False})
-
-        request.state.cache_hit = False
-        return StreamingResponse(err_stream(), media_type="text/event-stream")
+    return _stream_response(event_stream())

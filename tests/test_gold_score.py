@@ -1,8 +1,13 @@
-import json
+from pathlib import Path
+
+import pytest
 
 from eval.run_gold import load_items, score_item
 
+_GOLD = Path(__file__).resolve().parents[1] / "eval" / "gold.json"
 
+
+@pytest.mark.skipif(not _GOLD.is_file(), reason="eval/gold.json not present in this checkout")
 def test_gold_file_covers_the_domains():
     items = load_items(None)
     assert len(items) >= 180

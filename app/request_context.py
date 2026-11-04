@@ -52,3 +52,26 @@ def note_timing(name: str, elapsed_ms: float) -> None:
     # Parallel searches report the same step at once. Keep the slowest one,
     # which is the wall-clock contribution, rather than adding them together.
     timings[name] = round(max(float(timings.get(name, 0.0)), elapsed_ms), 2)
+
+
+# Keys exposed to QA load tests (response body / X-Timing) and request_done.
+QA_TIMING_KEYS = (
+    "embed_ms",
+    "qdrant_ms",
+    "rerank_ms",
+    "llm_first_token_ms",
+    "llm_total_ms",
+)
+
+
+def get_timings() -> dict:
+    fields = _fields.get()
+    if not fields:
+        return {}
+    return dict(fields.get("timings") or {})
+
+
+def qa_timings_payload() -> dict:
+    """Stable ms map for QA clients. Missing stages are 0 (e.g. cache hits)."""
+    raw = get_timings()
+    return {key: float(raw.get(key, 0) or 0) for key in QA_TIMING_KEYS}
